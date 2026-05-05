@@ -1,29 +1,8 @@
 # ChaosLab — Kubernetes Chaos Simulator
 
-> **chaoslab.eknathalabs.com** · Part of [EknathaLabs](https://eknathalabs.com)
+> **[chaoslab.eknathalabs.com](https://chaoslab.eknathalabs.com)** · Part of [EknathaLabs](https://eknathalabs.com)
 
-Inject real failures into Kubernetes clusters. Learn resilience engineering by intentionally breaking things in a safe, controlled environment — powered entirely by GitHub Actions and GitHub Pages. Zero servers. Zero monthly bills.
-
----
-
-## Quick Start
-
-1. Fork / create this repo on GitHub
-2. Add GitHub Secrets (see Setup below)
-3. Set `REPO` and `TOKEN` in `chaos.js`
-4. Enable GitHub Pages → `main` / root
-5. Open `chaoslab.eknathalabs.com` and run your first experiment
-
----
-
-## Fault Types
-
-| Fault | What it tests | Workflow |
-|-------|--------------|----------|
-| 💀 Pod Kill | ReplicaSet self-healing | `pod-kill.yml` |
-| 🔥 CPU Stress | HPA scaling, resource limits | `cpu-stress.yml` |
-| 🌐 Network Delay | Timeouts, circuit breakers | `net-delay.yml` |
-| 🖥️ Node Drain | Pod rescheduling, PodDisruptionBudgets | `node-drain.yml` |
+Inject real failures into Kubernetes clusters. Learn resilience engineering by breaking things safely — powered entirely by **GitHub Actions + GitHub Pages**. Zero servers. Zero monthly bills.
 
 ---
 
@@ -31,27 +10,27 @@ Inject real failures into Kubernetes clusters. Learn resilience engineering by i
 
 ### 1. GitHub Secrets
 
-Go to `Settings → Secrets and variables → Actions`:
+`Settings → Secrets and variables → Actions → New repository secret`
 
-| Secret | Value |
-|--------|-------|
-| `KUBECONFIG_DATA` | `base64 -w 0 ~/.kube/config` |
-| `CLUSTER_CONTEXT` | `kubectl config current-context` |
+| Secret | How to get the value |
+|--------|---------------------|
+| `KUBECONFIG_DATA` | Run: `base64 -w 0 ~/.kube/config` |
+| `CLUSTER_CONTEXT` | Run: `kubectl config current-context` |
 
-### 2. chaos.js
+### 2. Edit chaos.js
 
-Edit `chaos.js` and set:
+Open `chaos.js` and update line 1:
 
 ```js
-const CONFIG = {
-  REPO:  'your-username/chaoslab',
-  TOKEN: 'ghp_xxxx',  // Fine-grained PAT: Actions write scope
+const CFG = {
+  REPO:  'YOUR_USERNAME/chaoslab',   // ← your GitHub repo
+  TOKEN: 'ghp_xxxx',                 // ← fine-grained PAT (Actions:write)
 };
 ```
 
-> Create token at: `github.com/settings/tokens → Fine-grained tokens → Actions: write`
+Create token at: `github.com/settings/tokens → Fine-grained → Actions: write`
 
-### 3. GitHub Pages
+### 3. Enable GitHub Pages
 
 `Settings → Pages → Branch: main / root → Save`
 
@@ -59,58 +38,59 @@ Custom domain: `chaoslab.eknathalabs.com`
 
 ---
 
-## Safety Guardrails
+## Fault Types
 
-- `kube-system` namespace is **always** blocked
-- Blast radius capped at your chosen % (default 30%)
-- **Dry run ON by default** — safe to test without cluster changes
-- Every workflow has an `always:` cleanup/rollback block
-- Emergency rollback button available in UI at all times
-- Full audit trail in GitHub Actions run history
+| Fault | Workflow | What it tests |
+|-------|----------|--------------|
+| 💀 Pod Kill | `pod-kill.yml` | ReplicaSet self-healing |
+| 🔥 CPU Stress | `cpu-stress.yml` | HPA, resource limits |
+| 🌐 Network Delay | `net-delay.yml` | Timeouts, circuit breakers |
+| 🖥️ Node Drain | `node-drain.yml` | PodDisruptionBudgets, autoscaler |
 
 ---
 
-## Repo Structure
+## File Structure
 
 ```
 chaoslab/
-├── index.html                   ← Simulator UI (GitHub Pages)
-├── chaos.js                     ← UI logic + GitHub API dispatch
-├── assets/
-│   └── style.css                ← All styles
+├── index.html                    ← Simulator UI (self-contained)
+├── reports/
+│   └── index.html                ← Reports dashboard (self-contained)
 ├── .github/
 │   └── workflows/
 │       ├── pod-kill.yml
 │       ├── cpu-stress.yml
 │       ├── net-delay.yml
 │       ├── node-drain.yml
-│       └── rollback.yml         ← Emergency rollback
-├── scripts/
-│   ├── pod-kill.sh
-│   ├── cpu-stress.sh
-│   ├── net-delay.sh
-│   └── rollback.sh
-└── reports/
-    └── index.html               ← Experiment reports dashboard
+│       └── rollback.yml
+└── scripts/
+    ├── pod-kill.sh
+    ├── cpu-stress.sh
+    ├── net-delay.sh
+    └── rollback.sh
 ```
 
 ---
 
-## Local Cluster (kind)
+## Safety
+
+- `kube-system` is always blocked
+- Blast radius capped at selected % (default 30%)
+- Dry run ON by default
+- `always:` cleanup in every workflow
+- Emergency rollback button in UI
+- Full audit trail in GitHub Actions
+
+---
+
+## Local Cluster
 
 ```bash
-# Install kind
 brew install kind
-
-# Create cluster
 kind create cluster --name chaos-lab
-
-# Deploy a test app
 kubectl create deployment nginx --image=nginx --replicas=5
-kubectl expose deployment nginx --port=80
-
-# Get kubeconfig for GitHub Secret
 kind get kubeconfig --name chaos-lab | base64 -w 0
+# Paste output into KUBECONFIG_DATA secret
 ```
 
 ---
