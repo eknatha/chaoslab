@@ -2,117 +2,108 @@
 //  ChaosLab — chaos.js
 //  chaoslab.eknathalabs.com · EknathaLabs
 //
-//  SETUP: Fill in REPO and TOKEN before first use.
-//  TOKEN: Create a fine-grained PAT at github.com/settings/tokens
-//         Scope: Actions (write) for this repo only.
-//  ⚠ Never commit a real token to a public repo.
-//     Use a runtime prompt or environment variable instead.
+//  SETUP REQUIRED BEFORE FIRST USE:
+//  1. Set REPO to "your-github-username/chaoslab"
+//  2. Set TOKEN to a fine-grained PAT with Actions:write scope
+//     → github.com/settings/tokens → Fine-grained tokens
+//     → Repository access: chaoslab → Permissions: Actions (write)
+//  3. Never commit a real token to a public repo.
 // ============================================================
 
-const CONFIG = {
-  REPO:  'eknatha/chaoslab',   // ← your GitHub username/repo
-  TOKEN: '',                    // ← your fine-grained PAT (Actions:write)
+const CFG = {
+  REPO:  'eknatha/chaoslab',   // ← YOUR GITHUB USERNAME/REPO
+  TOKEN: '',                    // ← YOUR FINE-GRAINED PAT
 };
 
-// ============================================================
-//  State
-// ============================================================
-let selectedWorkflow  = 'pod-kill.yml';
-let selectedFaultName = 'Pod Kill';
-const runs = [];
+// ── State ────────────────────────────────────────────────────
+let selWorkflow  = 'pod-kill.yml';
+let selFaultName = 'Pod Kill';
+const runHistory = [];
 
-// ============================================================
-//  Fault selector
-// ============================================================
-function selectFault(el) {
-  document.querySelectorAll('.fault-card').forEach(c => c.classList.remove('active'));
+// ── Fault selector ───────────────────────────────────────────
+function pickFault(el) {
+  document.querySelectorAll('.fc').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
-  selectedWorkflow  = el.dataset.workflow;
-  selectedFaultName = el.dataset.name;
+  selWorkflow  = el.dataset.w;
+  selFaultName = el.dataset.n;
 
-  // Update builder title
-  const slug = selectedWorkflow.replace('.yml', '');
-  document.getElementById('builder-title').textContent =
-    `chaos run --fault ${slug}`;
+  const slug = selWorkflow.replace('.yml', '');
+  document.getElementById('bslug').textContent =
+    `chaos run --fault ${slug}${document.getElementById('dry-run').checked ? ' --dry-run' : ''}`;
 
-  // Show/hide extra fields
-  const cpuRow = document.getElementById('cpu-workers-row');
-  cpuRow.style.display = (slug === 'cpu-stress' || slug === 'net-delay') ? 'grid' : 'none';
+  // Show extra fields for cpu-stress and net-delay
+  document.getElementById('xrow').style.display =
+    (slug === 'cpu-stress' || slug === 'net-delay') ? 'grid' : 'none';
 
-  log(`Selected fault: ${selectedFaultName}`, 'info');
+  tlog(`Selected fault: ${selFaultName} (${selWorkflow})`, 'inf');
 }
 
-// ============================================================
-//  Dry run label
-// ============================================================
-function updateDryLabel() {
-  const on = document.getElementById('dry-run').checked;
-  document.getElementById('dry-label').textContent =
-    on ? '🔵 Dry run ON — safe to test' : '🔴 Dry run OFF — LIVE run';
-  document.getElementById('dry-label').style.color =
-    on ? 'var(--muted)' : 'var(--danger)';
+// ── Dry-run toggle label ─────────────────────────────────────
+function syncDryLabel() {
+  const on  = document.getElementById('dry-run').checked;
+  const lbl = document.getElementById('dry-lbl');
+  lbl.textContent = on ? '🔵 Dry run ON — safe' : '🔴 Dry run OFF — LIVE';
+  lbl.style.color = on ? '' : 'var(--red)';
+
+  const slug = selWorkflow.replace('.yml', '');
+  document.getElementById('bslug').textContent =
+    `chaos run --fault ${slug}${on ? ' --dry-run' : ''}`;
 }
 
-// ============================================================
-//  Run experiment
-// ============================================================
+// ── Run experiment ───────────────────────────────────────────
 async function runExperiment() {
-  const namespace   = document.getElementById('namespace').value.trim();
-  const selector    = document.getElementById('selector').value.trim();
-  const duration    = document.getElementById('duration').value;
-  const blast       = document.getElementById('blast').value;
-  const cpuWorkers  = document.getElementById('cpu-workers')?.value || '4';
-  const delayMs     = document.getElementById('delay-ms')?.value || '500';
-  const dryRun      = document.getElementById('dry-run').checked;
+  const ns     = document.getElementById('ns').value.trim();
+  const sel    = document.getElementById('sel').value.trim();
+  const dur    = document.getElementById('dur').value;
+  const blast  = document.getElementById('blast').value;
+  const cpuw   = document.getElementById('cpuw').value;
+  const dms    = document.getElementById('dms').value;
+  const dryRun = document.getElementById('dry-run').checked;
 
   // Validation
-  if (!namespace) { log('✗ Namespace is required.', 'err'); return; }
-  if (!selector)  { log('✗ Label selector is required (e.g. app=frontend).', 'err'); return; }
+  if (!ns)  { tlog('✗ Namespace is required.', 'err'); return; }
+  if (!sel) { tlog('✗ Label selector is required (e.g. app=frontend).', 'err'); return; }
 
-  if (namespace === 'kube-system') {
-    log('✗ BLOCKED: kube-system namespace is protected and cannot be targeted.', 'err');
+  if (ns === 'kube-system') {
+    tlog('✗ BLOCKED: kube-system is protected and cannot be targeted.', 'err');
     return;
   }
 
-  if (!CONFIG.TOKEN) {
-    log('✗ No GitHub token set. Open chaos.js and set CONFIG.TOKEN.', 'err');
-    log('  → github.com/settings/tokens → Fine-grained token → Actions:write', 'info');
+  if (!CFG.TOKEN) {
+    tlog('✗ CONFIG.TOKEN not set. Open chaos.js and add your GitHub PAT.', 'err');
+    tlog('  → github.com/settings/tokens → Fine-grained → Actions:write', 'inf');
     return;
   }
 
   setStatus('running');
-  setRunBtn(true);
+  setBtnState(true);
 
-  log('─'.repeat(50), 'dim');
-  log(`▶ Experiment: ${selectedFaultName}`, 'info');
-  log(`  Namespace   : ${namespace}`, 'dim');
-  log(`  Selector    : ${selector}`, 'dim');
-  log(`  Duration    : ${duration}s`, 'dim');
-  log(`  Blast radius: ${blast}%`, 'dim');
-  log(`  Dry run     : ${dryRun}`, dryRun ? 'dim' : 'warn');
-  log(`  Workflow    : ${selectedWorkflow}`, 'dim');
-  log('Dispatching to GitHub Actions...', 'warn');
+  tlog('─'.repeat(48), 'dim');
+  tlog(`▶ Fault: ${selFaultName}`, 'inf');
+  tlog(`  ns:${ns}  sel:${sel}  dur:${dur}s  blast:${blast}%  dry:${dryRun}`, 'dim');
+  tlog(`  Workflow: ${selWorkflow}`, 'dim');
+  tlog('Dispatching to GitHub Actions...', 'wrn');
 
-  // Build inputs based on workflow type
+  // Build inputs payload
   const inputs = {
-    namespace,
-    selector,
-    duration: String(duration),
+    namespace:    ns,
+    selector:     sel,
+    duration:     String(dur),
     blast_radius: String(blast),
-    dry_run: String(dryRun),
+    dry_run:      String(dryRun),
   };
-  if (selectedWorkflow === 'cpu-stress.yml') inputs.cpu_workers = String(cpuWorkers);
-  if (selectedWorkflow === 'net-delay.yml')  inputs.delay_ms    = String(delayMs);
+  if (selWorkflow === 'cpu-stress.yml') inputs.cpu_workers = String(cpuw);
+  if (selWorkflow === 'net-delay.yml')  inputs.delay_ms    = String(dms);
 
   try {
     const res = await fetch(
-      `https://api.github.com/repos/${CONFIG.REPO}/actions/workflows/${selectedWorkflow}/dispatches`,
+      `https://api.github.com/repos/${CFG.REPO}/actions/workflows/${selWorkflow}/dispatches`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${CONFIG.TOKEN}`,
-          'Accept': 'application/vnd.github+json',
-          'Content-Type': 'application/json',
+          'Authorization':        `Bearer ${CFG.TOKEN}`,
+          'Accept':               'application/vnd.github+json',
+          'Content-Type':         'application/json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
         body: JSON.stringify({ ref: 'main', inputs }),
@@ -120,127 +111,147 @@ async function runExperiment() {
     );
 
     if (res.status === 204) {
-      log('✓ Workflow dispatched successfully!', 'ok');
-      log(`  View run → github.com/${CONFIG.REPO}/actions`, 'info');
-      if (!dryRun) {
-        log('⚠ Live run in progress — monitor your cluster.', 'warn');
-      }
-      addRun(selectedFaultName, namespace, selector, dryRun, 'dispatched');
+      tlog('✓ Workflow dispatched successfully!', 'ok');
+      tlog(`  Monitor → github.com/${CFG.REPO}/actions`, 'inf');
+      if (!dryRun) tlog('⚠ Live run active — monitor your cluster.', 'wrn');
+      addRun(selFaultName, ns, sel, dryRun);
     } else {
       const body = await res.json().catch(() => ({}));
-      log(`✗ Dispatch failed (HTTP ${res.status}): ${body.message || 'unknown error'}`, 'err');
-      if (res.status === 401) log('  Check your TOKEN — it may be expired or lack Actions:write scope.', 'warn');
-      if (res.status === 404) log('  Check your REPO name in CONFIG.', 'warn');
-      if (res.status === 422) log('  Workflow not found — ensure the .yml file is on the main branch.', 'warn');
+      tlog(`✗ Dispatch failed (HTTP ${res.status}): ${body.message || 'unknown'}`, 'err');
+      if (res.status === 401) tlog('  Token expired or missing Actions:write scope.', 'wrn');
+      if (res.status === 404) tlog('  Check CFG.REPO — repo or workflow file not found.', 'wrn');
+      if (res.status === 422) tlog('  Workflow file not on main branch yet — push it first.', 'wrn');
     }
   } catch (err) {
-    log(`✗ Network error: ${err.message}`, 'err');
+    tlog(`✗ Network error: ${err.message}`, 'err');
   } finally {
     setStatus('ready');
-    setRunBtn(false);
+    setBtnState(false);
   }
 }
 
-// ============================================================
-//  Emergency rollback
-// ============================================================
-async function triggerRollback() {
-  if (!CONFIG.TOKEN) { log('✗ No GitHub token set. Cannot trigger rollback.', 'err'); return; }
+// ── Emergency rollback ───────────────────────────────────────
+async function emergencyRollback() {
+  if (!CFG.TOKEN) {
+    tlog('✗ CONFIG.TOKEN not set — cannot trigger rollback.', 'err');
+    return;
+  }
 
-  const namespace = document.getElementById('namespace').value.trim() || 'default';
+  const ns = document.getElementById('ns').value.trim() || 'default';
 
-  if (!confirm(`Emergency rollback for namespace: "${namespace}"?\n\nThis will:\n• Delete all chaos pods\n• Remove chaos DaemonSets\n• Uncordon all nodes\n• Restart all deployments\n\nConfirm?`)) return;
+  const confirmed = confirm(
+    `Emergency rollback for namespace: "${ns}"\n\n` +
+    `This will:\n` +
+    `• Delete all chaos pods and DaemonSets\n` +
+    `• Uncordon all cordoned nodes\n` +
+    `• Rolling restart all deployments\n\n` +
+    `Confirm?`
+  );
+  if (!confirmed) return;
 
   setStatus('rolling back');
-  log('─'.repeat(50), 'dim');
-  log(`⚠ EMERGENCY ROLLBACK triggered for namespace: ${namespace}`, 'warn');
+  tlog('─'.repeat(48), 'dim');
+  tlog(`⚠ Emergency rollback triggered → ns:${ns}`, 'wrn');
 
   try {
     const res = await fetch(
-      `https://api.github.com/repos/${CONFIG.REPO}/actions/workflows/rollback.yml/dispatches`,
+      `https://api.github.com/repos/${CFG.REPO}/actions/workflows/rollback.yml/dispatches`,
       {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${CONFIG.TOKEN}`,
-          'Accept': 'application/vnd.github+json',
-          'Content-Type': 'application/json',
+          'Authorization':        `Bearer ${CFG.TOKEN}`,
+          'Accept':               'application/vnd.github+json',
+          'Content-Type':         'application/json',
+          'X-GitHub-Api-Version': '2022-11-28',
         },
-        body: JSON.stringify({ ref: 'main', inputs: { namespace } }),
+        body: JSON.stringify({ ref: 'main', inputs: { namespace: ns } }),
       }
     );
 
     if (res.status === 204) {
-      log('✓ Rollback workflow dispatched.', 'ok');
-      log(`  View rollback → github.com/${CONFIG.REPO}/actions`, 'info');
+      tlog('✓ Rollback workflow dispatched.', 'ok');
+      tlog(`  Monitor → github.com/${CFG.REPO}/actions`, 'inf');
     } else {
-      log(`✗ Rollback dispatch failed (HTTP ${res.status})`, 'err');
+      tlog(`✗ Rollback failed (HTTP ${res.status})`, 'err');
     }
   } catch (err) {
-    log(`✗ Network error: ${err.message}`, 'err');
+    tlog(`✗ Network error: ${err.message}`, 'err');
   } finally {
     setStatus('ready');
   }
 }
 
-// ============================================================
-//  Log helpers
-// ============================================================
-function log(msg, type = '') {
-  const body = document.getElementById('log');
+// ── Terminal log helpers ─────────────────────────────────────
+function tlog(msg, cls = '') {
+  const log  = document.getElementById('log');
   const now  = new Date().toTimeString().slice(0, 8);
   const line = document.createElement('div');
-  line.className = 'log-line';
-  line.innerHTML = `<span class="lt">${now}</span><span class="lm ${type}">${msg}</span>`;
-  body.appendChild(line);
-  body.scrollTop = body.scrollHeight;
-  document.getElementById('log-status').textContent = type === 'ok' ? 'done' : type || 'running';
+  line.className = 'll';
+  line.innerHTML = `<span class="lt">${now}</span><span class="${cls}">${msg}</span>`;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+  document.getElementById('term-st').textContent =
+    cls === 'ok' ? 'done' : cls || 'running';
 }
 
 function clearLog() {
   document.getElementById('log').innerHTML =
-    '<div class="log-line"><span class="lt">--:--:--</span><span class="lm dim">Log cleared.</span></div>';
-  document.getElementById('log-status').textContent = 'idle';
+    '<div class="ll"><span class="lt">--:--:--</span><span class="dim">Log cleared.</span></div>';
+  document.getElementById('term-st').textContent = 'idle';
 }
 
-function setStatus(text) {
-  document.getElementById('status-text').textContent = text;
+function setStatus(txt) {
+  document.getElementById('nav-status').textContent = txt;
+  document.getElementById('term-st').textContent   = txt;
 }
 
-function setRunBtn(disabled) {
+function setBtnState(disabled) {
   const btn = document.getElementById('run-btn');
-  btn.disabled = disabled;
+  btn.disabled    = disabled;
   btn.textContent = disabled ? '⏳ Dispatching...' : '▶ Run Experiment';
 }
 
-// ============================================================
-//  Recent runs table
-// ============================================================
-function addRun(fault, ns, selector, dry, status) {
-  const now = new Date().toLocaleTimeString();
-  runs.unshift({ fault, ns, selector, dry, status, time: now });
+// ── Recent runs list ─────────────────────────────────────────
+function addRun(fault, ns, sel, dry) {
+  runHistory.unshift({
+    fault, ns, sel, dry,
+    time: new Date().toLocaleTimeString(),
+  });
 
-  const list = document.getElementById('runs-list');
-  list.innerHTML = runs.slice(0, 10).map(r => `
-    <div class="run-item">
-      <div class="run-dot ${r.dry ? 'rd-dry' : 'rd-ok'}"></div>
-      <span class="run-fault">${r.fault}</span>
-      <span class="run-ns">ns:${r.ns}</span>
-      <span class="run-sel">${r.selector}</span>
-      <span class="run-time">${r.time}</span>
-      <span class="run-badge ${r.dry ? 'rb-dry' : 'rb-live'}">${r.dry ? 'dry-run' : 'live'}</span>
-    </div>`).join('');
+  document.getElementById('runs').innerHTML =
+    runHistory.slice(0, 10).map(r => `
+      <div class="run-row">
+        <div class="rdot ${r.dry ? 'rd-dry' : 'rd-ok'}"></div>
+        <span class="rfault">${r.fault}</span>
+        <span class="rns">ns:${r.ns}</span>
+        <span class="rsel">${r.sel}</span>
+        <span class="rtime">${r.time}</span>
+        <span class="rbadge ${r.dry ? 'rb-dry' : 'rb-live'}">${r.dry ? 'dry-run' : 'live'}</span>
+      </div>`).join('');
 }
 
-// ============================================================
-//  Init
-// ============================================================
-document.addEventListener('DOMContentLoaded', () => {
-  updateDryLabel();
+// ── Scroll fade-in observer ──────────────────────────────────
+const fadeObs = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.classList.add('in');
+      fadeObs.unobserve(e.target);
+    }
+  });
+}, { threshold: 0.08 });
 
-  if (!CONFIG.TOKEN) {
-    log('⚠ No GitHub token configured. Set CONFIG.TOKEN in chaos.js.', 'warn');
-    log('  Dry run mode works without a token for preview only.', 'dim');
+// ── Init ────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  syncDryLabel();
+
+  // Start fade observers
+  document.querySelectorAll('.fade').forEach(el => fadeObs.observe(el));
+
+  // Token status
+  if (!CFG.TOKEN) {
+    tlog('⚠ CONFIG.TOKEN not set — open chaos.js to configure.', 'wrn');
+    tlog('  Dry run mode works without a token for UI preview.', 'dim');
   } else {
-    log('✓ Token configured. Ready to dispatch experiments.', 'ok');
+    tlog('✓ Token configured — ready to dispatch experiments.', 'ok');
   }
 });
