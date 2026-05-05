@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChaosLab — Experiment Reports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#080a0d;--bg2:#0d1018;--bg3:#131720;--bg4:#1a2030;--border:rgba(255,255,255,0.06);--border2:rgba(255,255,255,0.12);--text:#dde4ef;--text2:#a0aebb;--muted:#586070;--green:#00ff88;--cyan:#00d4ff;--red:#ff4455;--amber:#ffb020;--purple:#9d5ff0;--mono:'JetBrains Mono','Courier New',monospace;--display:'Syne',sans-serif;--r:10px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--mono);background:var(--bg);color:var(--text);min-height:100vh}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(0,255,136,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,136,.025) 1px,transparent 1px);background-size:44px 44px}
+
+nav{position:sticky;top:0;z-index:200;height:56px;padding:0 1.5rem;display:flex;align-items:center;justify-content:space-between;background:rgba(8,10,13,.92);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+.brand-box{width:30px;height:30px;border-radius:6px;background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:11px;color:var(--green)}
+.brand-name{font-family:var(--display);font-weight:800;font-size:15px;color:var(--text)}
+.brand-name em{font-style:normal;color:var(--green)}
+.nav-right{display:flex;align-items:center;gap:1rem}
+.nav-right a{font-size:11px;color:var(--muted);text-decoration:none;transition:color .2s}
+.nav-right a:hover{color:var(--green)}
+
+main{position:relative;z-index:1;max-width:1080px;margin:0 auto;padding:0 1.5rem 5rem}
+
+.hero{padding:3.5rem 0 2.5rem;text-align:center}
+.hero h1{font-family:var(--display);font-weight:800;font-size:clamp(2rem,5vw,3.5rem);letter-spacing:-.04em;line-height:1;margin-bottom:1rem}
+.hero h1 .hl{color:var(--green)}
+.hero-sub{font-size:13px;color:var(--text2);line-height:1.9;max-width:480px;margin:0 auto}
+
+.slabel{font-size:10px;color:var(--muted);letter-spacing:.18em;text-transform:uppercase;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.slabel::before{content:'';display:block;width:24px;height:1px;background:var(--green)}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:0;border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:2rem}
+@media(max-width:560px){.stats{grid-template-columns:1fr 1fr}}
+.stat{background:var(--bg2);padding:1.2rem;text-align:center;border-right:1px solid var(--border)}
+.stat:last-child{border-right:none}
+.stat-n{display:block;font-family:var(--display);font-weight:800;font-size:1.6rem;color:var(--green);line-height:1;margin-bottom:4px}
+.stat-l{display:block;font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+
+.tbl-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:2rem}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;padding:10px 14px;font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--border);background:var(--bg3)}
+td{padding:11px 14px;border-bottom:1px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+.pill{font-size:10px;padding:2px 8px;border-radius:3px;font-weight:700;letter-spacing:.06em}
+.pk{background:rgba(255,68,85,.1);color:var(--red)}
+.cs{background:rgba(255,176,32,.1);color:var(--amber)}
+.nd{background:rgba(0,212,255,.1);color:var(--cyan)}
+.nn{background:rgba(157,95,240,.1);color:var(--purple)}
+.s-ok{color:var(--green)} .s-dry{color:var(--muted)} .s-err{color:var(--red)}
+.act-link{color:var(--green);font-size:10px;text-decoration:none}
+.act-link:hover{text-decoration:underline}
+
+.empty{text-align:center;padding:3rem;color:var(--muted);font-size:13px;line-height:2}
+.empty a{color:var(--green);text-decoration:none}
+
+footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:1.5rem;max-width:1080px;margin:0 auto}
+.foot-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:10px}
+.foot-brand{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.foot-brand a{color:var(--muted);text-decoration:none}
+.foot-brand a:hover{color:var(--green)}
+.foot-links{display:flex;gap:1rem}
+.foot-links a{font-size:11px;color:var(--muted);text-decoration:none;transition:color .2s}
+.foot-links a:hover{color:var(--green)}
+.foot-copy{font-size:10px;color:var(--muted);opacity:.5}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="../index.html" class="brand">
+    <div class="brand-box">CL</div>
+    <span class="brand-name">Chaos<em>Lab</em></span>
+  </a>
+  <div class="nav-right">
+    <a href="../index.html">← Simulator</a>
+    <a href="https://github.com/eknatha/chaoslab/actions" target="_blank" rel="noopener">Actions ↗</a>
+    <a href="https://eknathalabs.com" target="_blank" rel="noopener">EknathaLabs ↗</a>
+  </div>
+</nav>
+
+<main>
+  <div class="hero">
+    <h1>Experiment <span class="hl">Reports</span></h1>
+    <p class="hero-sub">Auto-generated logs from every chaos run. JSON artifacts are saved in GitHub Actions for 30 days.</p>
+  </div>
+
+  <div class="slabel">summary</div>
+  <div class="stats">
+    <div class="stat"><span class="stat-n" id="s-total">—</span><span class="stat-l">Total runs</span></div>
+    <div class="stat"><span class="stat-n" id="s-live">—</span><span class="stat-l">Live runs</span></div>
+    <div class="stat"><span class="stat-n" id="s-dry">—</span><span class="stat-l">Dry runs</span></div>
+    <div class="stat"><span class="stat-n" id="s-last">—</span><span class="stat-l">Last fault</span></div>
+  </div>
+
+  <div class="slabel">experiment history</div>
+  <div id="container">
+    <div class="tbl-wrap">
+      <div class="empty">
+        No reports yet.<br>
+        Run your first experiment from the <a href="../index.html">simulator</a>.<br>
+        Reports appear here after each GitHub Actions run completes.
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <div class="foot-inner">
+    <div class="foot-brand">
+      <div class="brand-box" style="width:22px;height:22px;font-size:9px">CL</div>
+      <span>ChaosLab · <a href="https://eknathalabs.com">EknathaLabs</a></span>
+    </div>
+    <div class="foot-links">
+      <a href="../index.html">Simulator</a>
+      <a href="https://github.com/eknatha/chaoslab" target="_blank" rel="noopener">GitHub</a>
+    </div>
+  </div>
+  <div class="foot-copy">© 2026 EknathaLabs · MIT License</div>
+</footer>
+
+<script>
+const FAULTS = {
+  'pod-kill':   { label:'Pod Kill',      cls:'pk' },
+  'cpu-stress': { label:'CPU Stress',    cls:'cs' },
+  'net-delay':  { label:'Net Delay',     cls:'nd' },
+  'node-drain': { label:'Node Drain',    cls:'nn' },
+};
+
+async function loadReports() {
+  try {
+    const res = await fetch('manifest.json');
+    if (!res.ok) return;
+    const { files } = await res.json();
+    const reports = (await Promise.all(
+      files.map(f => fetch(f).then(r => r.json()).catch(() => null))
+    )).filter(Boolean);
+    if (reports.length) renderReports(reports);
+  } catch { /* no manifest yet — show empty state */ }
+}
+
+function renderReports(reports) {
+  const live = reports.filter(r => r.dry_run === 'false');
+  const dry  = reports.filter(r => r.dry_run === 'true');
+  const last = FAULTS[reports[0]?.fault]?.label || reports[0]?.fault || '—';
+
+  document.getElementById('s-total').textContent = reports.length;
+  document.getElementById('s-live').textContent  = live.length;
+  document.getElementById('s-dry').textContent   = dry.length;
+  document.getElementById('s-last').textContent  = last;
+
+  const rows = reports.map(r => {
+    const f   = FAULTS[r.fault] || { label: r.fault, cls: '' };
+    const dry = r.dry_run === 'true';
+    const ts  = r.timestamp ? new Date(r.timestamp).toLocaleString() : '—';
+    return `<tr>
+      <td><span class="pill ${f.cls}">${f.label}</span></td>
+      <td>${r.namespace || '—'}</td>
+      <td style="color:var(--text2);font-size:11px">${r.selector || '—'}</td>
+      <td>${r.duration || '—'}s</td>
+      <td class="${dry ? 's-dry' : r.status === 'success' ? 's-ok' : 's-err'}">
+        ${dry ? 'dry-run' : r.status || '—'}
+      </td>
+      <td style="color:var(--muted);font-size:11px">${ts}</td>
+      <td><a class="act-link" href="https://github.com/eknatha/chaoslab/actions/runs/${r.run_id}" target="_blank" rel="noopener">View ↗</a></td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('container').innerHTML = `
+    <div class="tbl-wrap">
+      <table>
+        <thead><tr>
+          <th>Fault</th><th>Namespace</th><th>Selector</th>
+          <th>Duration</th><th>Status</th><th>Timestamp</th><th>Run</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+loadReports();
+</script>
+</body>
+</html>
