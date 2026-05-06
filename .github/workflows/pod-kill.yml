@@ -1,0 +1,98 @@
+name: "Chaos — Pod Kill"
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: "Target namespace"
+        required: true
+        default: "default"
+      selector:
+        description: "Label selector (e.g. app=frontend)"
+        required: true
+      duration:
+        description: "Seconds before recovery check"
+        default: "60"
+      blast_radius:
+        description: "Max % of matching pods to kill"
+        default: "30"
+      dry_run:
+        description: "true = print only, false = execute"
+        default: "true"
+
+jobs:
+  pod-kill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+
+      - name: Load kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl config use-context "${{ secrets.CLUSTER_CONTEXT }}"
+
+      - name: Verify cluster
+        run: kubectl cluster-info && kubectl get nodes
+
+      - name: Block kube-system
+        run: |
+          if [ "${{ inputs.namespace }}" = "kube-system" ]; then
+            echo "::error::kube-system is protected. Aborting."
+            exit 1
+          fi
+
+      - name: Count pods + blast radius
+        run: |
+          TOTAL=$(kubectl get pods -n "${{ inputs.namespace }}" \
+            -l "${{ inputs.selector }}" --no-headers 2>/dev/null | wc -l | tr -d ' ')
+          [ "$TOTAL" -eq 0 ] && { echo "::error::No pods found."; exit 1; }
+          MAX=$(( TOTAL * ${{ inputs.blast_radius }} / 100 ))
+          [ "$MAX" -eq 0 ] && MAX=1
+          echo "TOTAL=$TOTAL" >> $GITHUB_ENV
+          echo "MAX=$MAX"     >> $GITHUB_ENV
+          echo "Total: $TOTAL  Kill up to: $MAX"
+          kubectl get pods -n "${{ inputs.namespace }}" -l "${{ inputs.selector }}"
+
+      - name: DRY RUN preview
+        if: inputs.dry_run == 'true'
+        run: |
+          echo "=== DRY RUN — no changes ==="
+          echo "Would delete up to $MAX of $TOTAL pods:"
+          kubectl get pods -n "${{ inputs.namespace }}" \
+            -l "${{ inputs.selector }}" --no-headers -o name | head -n "$MAX"
+
+      - name: LIVE execute
+        if: inputs.dry_run == 'false'
+        run: bash scripts/pod-kill.sh "${{ inputs.namespace }}" "${{ inputs.selector }}" "$MAX"
+
+      - name: Wait + verify recovery
+        if: inputs.dry_run == 'false'
+        run: |
+          sleep "${{ inputs.duration }}"
+          kubectl get pods -n "${{ inputs.namespace }}" -l "${{ inputs.selector }}"
+
+      - name: Save report
+        if: always()
+        run: |
+          mkdir -p reports
+          cat > reports/run-${{ github.run_id }}.json <<EOF
+          {"run_id":"${{ github.run_id }}","fault":"pod-kill","namespace":"${{ inputs.namespace }}","selector":"${{ inputs.selector }}","dry_run":"${{ inputs.dry_run }}","duration":"${{ inputs.duration }}","blast_radius":"${{ inputs.blast_radius }}","total_pods":"$TOTAL","pods_killed":"$MAX","timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","actor":"${{ github.actor }}","status":"${{ job.status }}"}
+          EOF
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-pod-kill-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
