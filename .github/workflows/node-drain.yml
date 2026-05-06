@@ -1,0 +1,106 @@
+name: "Chaos — Node Drain"
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: "Namespace to monitor"
+        required: true
+        default: "default"
+      selector:
+        description: "Label selector to watch recovery"
+        required: true
+      duration:
+        description: "Seconds to keep node cordoned"
+        default: "120"
+      blast_radius:
+        description: "Unused — kept for API consistency"
+        default: "30"
+      dry_run:
+        description: "true = print only, false = execute"
+        default: "true"
+
+jobs:
+  node-drain:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+
+      - name: Load kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl config use-context "${{ secrets.CLUSTER_CONTEXT }}"
+
+      - name: Verify cluster
+        run: kubectl cluster-info
+
+      - name: Find target worker node
+        run: |
+          NODE=$(kubectl get nodes \
+            --selector='!node-role.kubernetes.io/control-plane' \
+            --no-headers -o name | head -1 | sed 's|node/||')
+          [ -z "$NODE" ] && { echo "::error::No worker nodes found."; exit 1; }
+          echo "TARGET_NODE=$NODE" >> $GITHUB_ENV
+          echo "Target: $NODE"
+          kubectl get node "$NODE"
+
+      - name: DRY RUN preview
+        if: inputs.dry_run == 'true'
+        run: |
+          echo "=== DRY RUN — no changes ==="
+          echo "Would cordon + drain: $TARGET_NODE"
+          echo "  kubectl cordon $TARGET_NODE"
+          echo "  kubectl drain $TARGET_NODE --ignore-daemonsets --delete-emptydir-data"
+          echo "  sleep ${{ inputs.duration }}"
+          echo "  kubectl uncordon $TARGET_NODE  ← always runs"
+          kubectl get nodes
+          kubectl get pods -A --field-selector="spec.nodeName=$TARGET_NODE" 2>/dev/null || true
+
+      - name: LIVE cordon
+        if: inputs.dry_run == 'false'
+        run: kubectl cordon "$TARGET_NODE"
+
+      - name: LIVE drain
+        if: inputs.dry_run == 'false'
+        run: |
+          kubectl drain "$TARGET_NODE" \
+            --ignore-daemonsets \
+            --delete-emptydir-data \
+            --timeout=120s
+          kubectl get pods -n "${{ inputs.namespace }}" -l "${{ inputs.selector }}"
+
+      - name: Hold
+        if: inputs.dry_run == 'false'
+        run: sleep "${{ inputs.duration }}"
+
+      - name: ALWAYS uncordon
+        if: always() && inputs.dry_run == 'false'
+        run: |
+          kubectl uncordon "$TARGET_NODE"
+          kubectl get node "$TARGET_NODE"
+
+      - name: Save report
+        if: always()
+        run: |
+          mkdir -p reports
+          cat > reports/run-${{ github.run_id }}.json <<EOF
+          {"run_id":"${{ github.run_id }}","fault":"node-drain","target_node":"$TARGET_NODE","namespace":"${{ inputs.namespace }}","selector":"${{ inputs.selector }}","dry_run":"${{ inputs.dry_run }}","duration":"${{ inputs.duration }}","timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","actor":"${{ github.actor }}","status":"${{ job.status }}"}
+          EOF
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-node-drain-${{ github.run_id }}
+          path: reports/
+          retention-days: 30

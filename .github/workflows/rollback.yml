@@ -1,0 +1,33 @@
+name: "Safety — Emergency Rollback"
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: "Namespace to restore"
+        required: true
+        default: "default"
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+
+      - name: Load kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl config use-context "${{ secrets.CLUSTER_CONTEXT }}"
+
+      - name: Run rollback script
+        run: bash scripts/rollback.sh "${{ inputs.namespace }}"

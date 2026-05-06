@@ -1,0 +1,98 @@
+name: "Chaos — Network Delay"
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: "Target namespace"
+        required: true
+        default: "default"
+      selector:
+        description: "Label selector to monitor"
+        required: true
+      delay_ms:
+        description: "Network delay in milliseconds"
+        default: "500"
+      duration:
+        description: "Duration in seconds"
+        default: "60"
+      blast_radius:
+        description: "Unused — kept for API consistency"
+        default: "30"
+      dry_run:
+        description: "true = print only, false = execute"
+        default: "true"
+
+jobs:
+  net-delay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+
+      - name: Load kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl config use-context "${{ secrets.CLUSTER_CONTEXT }}"
+
+      - name: Verify cluster
+        run: kubectl cluster-info
+
+      - name: Block kube-system
+        run: |
+          if [ "${{ inputs.namespace }}" = "kube-system" ]; then
+            echo "::error::kube-system is protected."
+            exit 1
+          fi
+
+      - name: DRY RUN preview
+        if: inputs.dry_run == 'true'
+        run: |
+          echo "=== DRY RUN — no changes ==="
+          echo "Would deploy: chaos-net-delay DaemonSet in ${{ inputs.namespace }}"
+          echo "  Delay   : ${{ inputs.delay_ms }}ms (tc netem)"
+          echo "  Duration: ${{ inputs.duration }}s"
+          kubectl get pods -n "${{ inputs.namespace }}" -l "${{ inputs.selector }}" || true
+
+      - name: LIVE execute
+        if: inputs.dry_run == 'false'
+        run: |
+          bash scripts/net-delay.sh \
+            "${{ inputs.namespace }}" \
+            "${{ inputs.delay_ms }}" \
+            "${{ inputs.duration }}"
+
+      - name: Wait
+        if: inputs.dry_run == 'false'
+        run: sleep "${{ inputs.duration }}"
+
+      - name: Cleanup DaemonSet
+        if: inputs.dry_run == 'false' && always()
+        run: |
+          kubectl delete daemonset chaos-net-delay \
+            -n "${{ inputs.namespace }}" --ignore-not-found
+
+      - name: Save report
+        if: always()
+        run: |
+          mkdir -p reports
+          cat > reports/run-${{ github.run_id }}.json <<EOF
+          {"run_id":"${{ github.run_id }}","fault":"net-delay","namespace":"${{ inputs.namespace }}","selector":"${{ inputs.selector }}","delay_ms":"${{ inputs.delay_ms }}","dry_run":"${{ inputs.dry_run }}","duration":"${{ inputs.duration }}","timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","actor":"${{ github.actor }}","status":"${{ job.status }}"}
+          EOF
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-net-delay-${{ github.run_id }}
+          path: reports/
+          retention-days: 30

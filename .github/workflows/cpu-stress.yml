@@ -1,0 +1,101 @@
+name: "Chaos — CPU Stress"
+
+on:
+  workflow_dispatch:
+    inputs:
+      namespace:
+        description: "Target namespace"
+        required: true
+        default: "default"
+      selector:
+        description: "Label selector to monitor"
+        required: true
+      duration:
+        description: "Stress duration in seconds"
+        default: "60"
+      cpu_workers:
+        description: "Number of CPU stress threads"
+        default: "4"
+      blast_radius:
+        description: "Unused — kept for API consistency"
+        default: "30"
+      dry_run:
+        description: "true = print only, false = execute"
+        default: "true"
+
+jobs:
+  cpu-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: latest
+
+      - name: Load kubeconfig
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG_DATA }}" | base64 -d > ~/.kube/config
+          chmod 600 ~/.kube/config
+          kubectl config use-context "${{ secrets.CLUSTER_CONTEXT }}"
+
+      - name: Verify cluster
+        run: kubectl cluster-info
+
+      - name: Block kube-system
+        run: |
+          if [ "${{ inputs.namespace }}" = "kube-system" ]; then
+            echo "::error::kube-system is protected."
+            exit 1
+          fi
+
+      - name: DRY RUN preview
+        if: inputs.dry_run == 'true'
+        run: |
+          echo "=== DRY RUN — no changes ==="
+          echo "Would deploy: chaos-cpu-stress pod in ${{ inputs.namespace }}"
+          echo "  Workers : ${{ inputs.cpu_workers }}"
+          echo "  Duration: ${{ inputs.duration }}s"
+          kubectl get pods -n "${{ inputs.namespace }}" -l "${{ inputs.selector }}" || true
+
+      - name: LIVE execute
+        if: inputs.dry_run == 'false'
+        run: |
+          bash scripts/cpu-stress.sh \
+            "${{ inputs.namespace }}" \
+            "${{ inputs.cpu_workers }}" \
+            "${{ inputs.duration }}"
+
+      - name: Monitor + wait
+        if: inputs.dry_run == 'false'
+        run: |
+          sleep "${{ inputs.duration }}"
+          kubectl get pods -n "${{ inputs.namespace }}" -l "${{ inputs.selector }}"
+
+      - name: Cleanup stress pod
+        if: inputs.dry_run == 'false' && always()
+        run: |
+          kubectl delete pod chaos-cpu-stress \
+            -n "${{ inputs.namespace }}" \
+            --ignore-not-found --grace-period=0
+
+      - name: Save report
+        if: always()
+        run: |
+          mkdir -p reports
+          cat > reports/run-${{ github.run_id }}.json <<EOF
+          {"run_id":"${{ github.run_id }}","fault":"cpu-stress","namespace":"${{ inputs.namespace }}","selector":"${{ inputs.selector }}","cpu_workers":"${{ inputs.cpu_workers }}","dry_run":"${{ inputs.dry_run }}","duration":"${{ inputs.duration }}","timestamp":"$(date -u +%Y-%m-%dT%H:%M:%SZ)","actor":"${{ github.actor }}","status":"${{ job.status }}"}
+          EOF
+
+      - name: Upload artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-cpu-stress-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
