@@ -127,6 +127,15 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:1.
 </footer>
 
 <script>
+/* replaceChildren needs a fairly recent browser; fill it in so an older one
+   still gets the table rather than a blank page. */
+if (!Element.prototype.replaceChildren) {
+  Element.prototype.replaceChildren = function () {
+    while (this.firstChild) this.removeChild(this.firstChild);
+    if (arguments.length) this.append.apply(this, arguments);
+  };
+}
+
 /* The run name written by chaos.yml carries everything this page needs:
    "<fault> · <namespace> · <selector> · <dry|live> · <n>s · blast <n>%"
    so the history is readable through the public API with no credentials. */

@@ -175,6 +175,16 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:1.
 </footer>
 
 <script>
+/* replaceChildren is used throughout for safe DOM updates. It needs a fairly
+   recent browser, and an older one would otherwise fail on the first render,
+   so fill it in rather than leave a blank cluster behind. */
+if (!Element.prototype.replaceChildren) {
+  Element.prototype.replaceChildren = function () {
+    while (this.firstChild) this.removeChild(this.firstChild);
+    if (arguments.length) this.append.apply(this, arguments);
+  };
+}
+
 /* ChaosLab resilience linter.
    Reads Kubernetes manifests and reports what will break when each fault
    hits. Includes a small YAML reader — enough for manifests, no library. */

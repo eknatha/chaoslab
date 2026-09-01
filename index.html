@@ -42,6 +42,11 @@ a{color:inherit}
 :focus-visible{outline:2px solid var(--green);outline-offset:2px;border-radius:4px}
 button{font:inherit}
 
+/* ── error bar ── */
+.errbar{margin-top:1.25rem;padding:12px 15px;border-radius:8px;font-size:11.5px;line-height:1.75;
+  background:rgba(255,68,85,.06);border:1px solid rgba(255,68,85,.28);color:#ff8894}
+.errbar code{background:rgba(255,255,255,.07);padding:1px 5px;border-radius:3px}
+
 /* ── nav ── */
 nav{position:sticky;top:0;z-index:200;min-height:56px;padding:8px 1.25rem;display:flex;align-items:center;
   justify-content:space-between;gap:1rem;flex-wrap:wrap;
@@ -262,6 +267,16 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:1.
 </nav>
 
 <main>
+
+  <div class="errbar" id="errbar" role="alert" hidden></div>
+
+  <noscript>
+    <div class="errbar" style="display:block">
+      The simulator runs entirely in JavaScript. With it disabled this page is
+      just text — the cluster, the experiments and the incident report will not
+      appear.
+    </div>
+  </noscript>
 
   <header class="hero">
     <h1>Break Kubernetes on purpose</h1>
@@ -518,6 +533,16 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:1.
 </footer>
 
 <script>
+/* replaceChildren is used throughout for safe DOM updates. It needs a fairly
+   recent browser, and an older one would otherwise fail on the first render,
+   so fill it in rather than leave a blank cluster behind. */
+if (!Element.prototype.replaceChildren) {
+  Element.prototype.replaceChildren = function () {
+    while (this.firstChild) this.removeChild(this.firstChild);
+    if (arguments.length) this.append.apply(this, arguments);
+  };
+}
+
 /* ChaosLab simulation engine.
    A small Kubernetes control plane: scheduling, ReplicaSet reconciliation,
    probes, PodDisruptionBudgets, HPA, and a traffic model that produces the
@@ -1311,6 +1336,34 @@ let timeline = [], firstBreachT = null, postmortemText = '';
 let degradedFromT = null, recoveredAtT = null, replicasAtInjection = 0;
 const $ = id => document.getElementById(id);
 
+/* Storage is not always available: a browser with site data blocked, a
+   sandboxed iframe, or a strict privacy mode all make sessionStorage throw on
+   access rather than return null. Nothing here is important enough to take the
+   page down for, so it degrades to memory. */
+const memStore = {};
+function readToken() {
+  try { return sessionStorage.getItem('chaoslab.token') || ''; }
+  catch (e) { return memStore.token || ''; }
+}
+function writeToken(v) {
+  try { sessionStorage.setItem('chaoslab.token', v); }
+  catch (e) { memStore.token = v; }
+}
+
+/* Any uncaught failure becomes visible instead of leaving a dead page. */
+function fatal(msg) {
+  const bar = $('errbar');
+  if (bar) {
+    bar.textContent = 'This page hit an error and may not respond: ' + msg +
+      ' — please report it at github.com/eknatha/chaoslab/issues with your browser version.';
+    bar.hidden = false;
+  }
+  try { tlog(msg, 'err'); } catch (e) { /* the log itself may be what broke */ }
+}
+window.addEventListener('error', e => fatal(e.message || String(e.error || e)));
+window.addEventListener('unhandledrejection', e =>
+  fatal((e.reason && e.reason.message) || String(e.reason)));
+
 /* ── log ── */
 function tlog(msg, cls) {
   const log = $('log');
@@ -1522,9 +1575,19 @@ function runExperiment() {
   tlog('Measuring steady state for 15s before touching anything.', 'info');
 
   timer = setInterval(() => {
-    const m = tick(st);
-    renderCluster(); renderMetrics(m); renderSpark();
-    drainEvents(); trackRecovery();
+    let m;
+    try {
+      m = tick(st);
+      renderCluster(); renderMetrics(m); renderSpark();
+      drainEvents(); trackRecovery();
+    } catch (e) {
+      clearInterval(timer); timer = null;
+      st.running = false;
+      $('run-btn').disabled = false;
+      setStatus('stopped');
+      fatal('the simulation stopped: ' + e.message);
+      return;
+    }
 
     if (phase === 'baseline') {
       baselineSamples.push(st.samples[st.samples.length - 1]);
@@ -1705,6 +1768,7 @@ async function copyPostmortem() {
   if (!postmortemText) return;
   const btn = $('pm-copy');
   try {
+    if (!navigator.clipboard) throw new Error('no clipboard API');
     await navigator.clipboard.writeText(postmortemText);
     btn.textContent = 'Copied';
   } catch (e) {
@@ -1752,8 +1816,8 @@ function adviseOn(kind, chaos) {
 function repo() { return $('repo').value.trim(); }
 function token() {
   const t = $('token').value.trim();
-  if (t) sessionStorage.setItem('chaoslab.token', t);
-  return t || sessionStorage.getItem('chaoslab.token') || '';
+  if (t) writeToken(t);
+  return t || readToken();
 }
 
 async function dispatchLive() {
@@ -1869,16 +1933,29 @@ async function rollbackLive() {
   setStatus('idle');
 }
 
-/* ── init ── */
-buildFaults();
-['w-replicas', 'w-pdb', 'w-cpu', 'w-mem', 'w-readiness', 'w-liveness', 'w-hpa', 'w-spread']
-  .forEach(id => $(id).addEventListener('change', () => { if (!timer) resetAll(); }));
-$('repo').addEventListener('change', () => {
-  $('actions-link').href = 'https://github.com/' + repo() + '/actions';
+/* ── init ──
+   Each step stands alone. A browser that refuses one API must still leave a
+   working simulator behind, so the two steps that draw the cluster run first
+   and nothing optional can stop them. */
+function step(what, fn) {
+  try { fn(); return true; }
+  catch (e) { fatal('could not ' + what + ': ' + e.message); return false; }
+}
+
+step('build the fault list', buildFaults);
+step('start the cluster', resetAll);
+
+step('wire up the workload controls', () => {
+  ['w-replicas', 'w-pdb', 'w-cpu', 'w-mem', 'w-readiness', 'w-liveness', 'w-hpa', 'w-spread']
+    .forEach(id => $(id).addEventListener('change', () => { if (!timer) resetAll(); }));
+  $('repo').addEventListener('change', () => {
+    $('actions-link').href = 'https://github.com/' + repo() + '/actions';
+  });
 });
-const saved = sessionStorage.getItem('chaoslab.token');
+
+const saved = readToken();
 if (saved) $('token').value = saved;
-resetAll();
+
 tlog('Pick a fault, set what should stay true, and run it. Nothing here touches a real cluster until you switch to live mode.', 'dim');
 </script>
 </body>
