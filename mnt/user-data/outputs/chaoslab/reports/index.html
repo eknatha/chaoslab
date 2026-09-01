@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Experiment history — ChaosLab</title>
+<meta name="description" content="Every chaos experiment run against this cluster, read live from the GitHub Actions history.">
+<link rel="canonical" href="https://chaoslab.eknathalabs.com/reports/">
+<meta name="theme-color" content="#080a0d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23080a0d'/%3E%3Cpath d='M9 22 L16 8 L23 22 M12 17 h8' stroke='%2300ff88' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{--bg:#080a0d;--bg2:#0d1018;--bg3:#131720;--bg4:#1a2030;
+  --border:rgba(255,255,255,.06);--border2:rgba(255,255,255,.12);
+  --text:#dde4ef;--text2:#a0aebb;--muted:#586070;
+  --green:#00ff88;--cyan:#00d4ff;--red:#ff4455;--amber:#ffb020;--purple:#9d5ff0;
+  --mono:ui-monospace,'JetBrains Mono','SF Mono',Menlo,Consolas,monospace;
+  --display:'Syne',ui-sans-serif,system-ui,-apple-system,sans-serif;--r:10px}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--mono);background:var(--bg);color:var(--text);min-height:100vh}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,255,136,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,136,.022) 1px,transparent 1px);background-size:44px 44px}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--green);outline-offset:2px;border-radius:4px}
+button{font:inherit}
+nav{position:sticky;top:0;z-index:200;min-height:56px;padding:8px 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;background:rgba(8,10,13,.93);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+.brand-box{width:30px;height:30px;border-radius:6px;background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:11px;color:var(--green)}
+.brand-name{font-family:var(--display);font-weight:800;font-size:15px}
+.brand-name em{font-style:normal;color:var(--green)}
+.nav-right{display:flex;gap:.9rem;flex-wrap:wrap}
+.nav-right a{font-size:11px;color:var(--muted);text-decoration:none}
+.nav-right a:hover{color:var(--green)}
+main{position:relative;z-index:1;max-width:1120px;margin:0 auto;padding:0 1.25rem 5rem}
+.hero{padding:2.75rem 0 1.5rem;max-width:620px}
+.hero h1{font-family:var(--display);font-weight:800;font-size:clamp(1.9rem,5vw,3rem);letter-spacing:-.035em;line-height:1.03;margin-bottom:.9rem}
+.hero p{font-size:13px;color:var(--text2);line-height:1.85;max-width:56ch}
+.slabel{font-size:10px;color:var(--muted);letter-spacing:.16em;text-transform:uppercase;margin:2rem 0 12px;display:flex;align-items:center;gap:8px}
+.slabel::before{content:'';width:22px;height:1px;background:var(--green)}
+.repobar{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:1.25rem}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:10.5px;color:var(--muted)}
+.field input{background:var(--bg2);border:1px solid var(--border);color:var(--text);padding:8px 11px;border-radius:6px;font-family:var(--mono);font-size:12px;outline:none;min-width:240px}
+.field input:focus{border-color:var(--green)}
+.btn{padding:8px 15px;border-radius:6px;font-size:11.5px;font-weight:700;cursor:pointer;font-family:var(--mono);border:1px solid var(--border);background:transparent;color:var(--muted)}
+.btn:hover{border-color:var(--green);color:var(--green)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:1.5rem}
+@media(max-width:560px){.stats{grid-template-columns:1fr 1fr}}
+.stat{background:var(--bg2);padding:1.15rem;text-align:center}
+.stat b{display:block;font-family:var(--display);font-weight:800;font-size:1.55rem;color:var(--green);line-height:1;margin-bottom:5px}
+.stat span{font-size:9.5px;color:var(--muted)}
+.tbl{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:11.5px;min-width:660px}
+th{text-align:left;padding:10px 14px;font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--border);background:var(--bg3)}
+td{padding:11px 14px;border-bottom:1px solid var(--border)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.018)}
+.pill{font-size:10px;padding:2px 8px;border-radius:3px;font-weight:700;white-space:nowrap}
+.p-red{background:rgba(255,68,85,.12);color:var(--red)}
+.p-amber{background:rgba(255,176,32,.12);color:var(--amber)}
+.p-cyan{background:rgba(0,212,255,.1);color:var(--cyan)}
+.p-purple{background:rgba(157,95,240,.12);color:var(--purple)}
+.p-green{background:rgba(0,255,136,.1);color:var(--green)}
+.p-grey{background:rgba(88,96,112,.2);color:var(--muted)}
+.dim{color:var(--muted);font-size:10.5px}
+td a{color:var(--green);font-size:10.5px;text-decoration:none}
+td a:hover{text-decoration:underline}
+.msg{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:2rem;text-align:center;font-size:12px;color:var(--text2);line-height:2}
+.msg a{color:var(--green);text-decoration:none}
+.msg.err{border-color:rgba(255,68,85,.25)}
+footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:1.5rem 1.25rem;max-width:1120px;margin:0 auto}
+.foot-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:10px}
+.foot-brand{font-size:12px;color:var(--muted)}
+.foot-brand a{color:var(--muted);text-decoration:none}
+.foot-links{display:flex;gap:1rem;flex-wrap:wrap}
+.foot-links a{font-size:11px;color:var(--muted);text-decoration:none}
+.foot-links a:hover{color:var(--green)}
+.foot-copy{font-size:10px;color:var(--muted);opacity:.55}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="../" class="brand"><span class="brand-box" aria-hidden="true">CL</span><span class="brand-name">Chaos<em>Lab</em></span></a>
+  <div class="nav-right">
+    <a href="../">Simulator</a>
+    <a href="../linter.html">Resilience linter</a>
+    <a href="https://github.com/eknatha/chaoslab" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://eknathalabs.com" target="_blank" rel="noopener">EknathaLabs</a>
+  </div>
+</nav>
+
+<main>
+  <header class="hero">
+    <h1>Experiment history</h1>
+    <p>Every run is read straight from the GitHub Actions history of a public repository — no token, no database, nothing stored here. A failed run means the hypothesis was broken or the workload did not come back on its own.</p>
+  </header>
+
+  <div class="repobar">
+    <div class="field">
+      <label for="repo">Repository</label>
+      <input type="text" id="repo" value="eknatha/chaoslab">
+    </div>
+    <button class="btn" onclick="load()">Load history</button>
+  </div>
+
+  <div class="stats" id="stats" hidden>
+    <div class="stat"><b id="s-total">—</b><span>experiments</span></div>
+    <div class="stat"><b id="s-live">—</b><span>against a real cluster</span></div>
+    <div class="stat"><b id="s-pass">—</b><span>hypothesis held</span></div>
+    <div class="stat"><b id="s-last">—</b><span>most recent fault</span></div>
+  </div>
+
+  <div class="slabel">Runs</div>
+  <div id="out" aria-live="polite"><div class="msg">Loading…</div></div>
+</main>
+
+<footer>
+  <div class="foot-inner">
+    <div class="foot-brand">ChaosLab, part of <a href="https://eknathalabs.com">EknathaLabs</a></div>
+    <div class="foot-links">
+      <a href="../">Simulator</a>
+      <a href="../linter.html">Resilience linter</a>
+      <a href="https://github.com/eknatha/chaoslab" target="_blank" rel="noopener">Source</a>
+    </div>
+  </div>
+  <div class="foot-copy">MIT licensed. Built in public.</div>
+</footer>
+
+<script>
+/* The run name written by chaos.yml carries everything this page needs:
+   "<fault> · <namespace> · <selector> · <dry|live> · <n>s · blast <n>%"
+   so the history is readable through the public API with no credentials. */
+const FAULT_STYLE = {
+  'pod-kill':'p-red','container-kill':'p-red','cpu-stress':'p-amber','memory-stress':'p-amber',
+  'disk-fill':'p-amber','net-delay':'p-cyan','net-loss':'p-cyan','dns-blackhole':'p-purple',
+  'node-drain':'p-purple','zone-outage':'p-purple'
+};
+const $ = id => document.getElementById(id);
+const el = (t, c, x) => { const e = document.createElement(t); if (c) e.className = c; if (x != null) e.textContent = x; return e; };
+
+function parseName(title) {
+  const parts = String(title || '').split('\u00b7').map(s => s.trim());
+  if (parts.length < 4) return null;
+  return {
+    fault: parts[0], namespace: parts[1], selector: parts[2],
+    live: parts[3] === 'live', duration: parts[4] || '', blast: parts[5] || ''
+  };
+}
+
+function verdict(run, live) {
+  if (run.status !== 'completed') return { label: run.status.replace('_', ' '), cls: 'p-grey' };
+  if (!live) return { label: 'preview', cls: 'p-grey' };
+  if (run.conclusion === 'success') return { label: 'held', cls: 'p-green' };
+  if (run.conclusion === 'cancelled') return { label: 'cancelled', cls: 'p-grey' };
+  return { label: 'broke', cls: 'p-red' };
+}
+
+async function load() {
+  const repo = $('repo').value.trim();
+  const out = $('out');
+  out.replaceChildren(el('div', 'msg', 'Loading\u2026'));
+  $('stats').hidden = true;
+
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+    out.replaceChildren(el('div', 'msg err', 'That does not look like an owner/name repository path.'));
+    return;
+  }
+
+  try {
+    const res = await fetch('https://api.github.com/repos/' + repo + '/actions/workflows/chaos.yml/runs?per_page=50', {
+      headers: { 'Accept': 'application/vnd.github+json' }
+    });
+    if (res.status === 404) return showMessage(out, 'No chaos workflow has run in that repository yet.');
+    if (res.status === 403) return showMessage(out, 'GitHub is rate limiting anonymous requests from this network. Try again in a few minutes.');
+    if (!res.ok) return showMessage(out, 'GitHub returned HTTP ' + res.status + '.');
+
+    const data = await res.json();
+    const runs = (data.workflow_runs || [])
+      .map(r => ({ run: r, meta: parseName(r.display_title || r.name) }))
+      .filter(x => x.meta);
+
+    if (!runs.length) return showMessage(out, 'No experiments have been run yet.');
+    render(out, runs);
+  } catch (e) {
+    showMessage(out, 'Could not reach GitHub: ' + e.message);
+  }
+}
+
+function showMessage(out, text) {
+  const box = el('div', 'msg');
+  box.append(el('div', null, text));
+  const p = el('div');
+  const a = el('a', null, 'Run one from the simulator');
+  a.href = '../';
+  p.append(a);
+  box.append(p);
+  out.replaceChildren(box);
+}
+
+function render(out, rows) {
+  const live = rows.filter(r => r.meta.live);
+  const held = live.filter(r => r.run.conclusion === 'success').length;
+  $('s-total').textContent = rows.length;
+  $('s-live').textContent = live.length;
+  $('s-pass').textContent = live.length ? Math.round(held / live.length * 100) + '%' : '\u2014';
+  $('s-last').textContent = rows[0].meta.fault;
+  $('stats').hidden = false;
+
+  const wrap = el('div', 'tbl');
+  const table = el('table');
+  const thead = el('thead'), hr = el('tr');
+  ['Fault', 'Namespace', 'Selector', 'Duration', 'Blast', 'Outcome', 'When', ''].forEach(h => hr.append(el('th', null, h)));
+  thead.append(hr); table.append(thead);
+
+  const tb = el('tbody');
+  rows.forEach(({ run, meta }) => {
+    const tr = el('tr');
+    const td1 = el('td');
+    td1.append(el('span', 'pill ' + (FAULT_STYLE[meta.fault] || 'p-grey'), meta.fault));
+    tr.append(td1);
+    tr.append(el('td', null, meta.namespace));
+    tr.append(el('td', 'dim', meta.selector));
+    tr.append(el('td', 'dim', meta.duration));
+    tr.append(el('td', 'dim', meta.blast));
+    const v = verdict(run, meta.live);
+    const td6 = el('td');
+    td6.append(el('span', 'pill ' + v.cls, v.label));
+    tr.append(td6);
+    tr.append(el('td', 'dim', new Date(run.created_at).toLocaleString()));
+    const td8 = el('td');
+    const a = el('a', null, 'Full report');
+    a.href = run.html_url; a.target = '_blank'; a.rel = 'noopener';
+    a.title = 'Step summary, before and after numbers, and the JSON artifact';
+    td8.append(a);
+    tr.append(td8);
+    tb.append(tr);
+  });
+  table.append(tb); wrap.append(table);
+  out.replaceChildren(wrap);
+}
+
+const q = new URLSearchParams(location.search).get('repo');
+if (q) $('repo').value = q;
+load();
+</script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# ── Local cluster, stored kubeconfig ───────────────────────────────────
+github_owner       = "eknatha"
+github_repository  = "chaoslab"
+allowed_namespaces = ["chaos-demo"]
+
+auth_mode        = "kubeconfig"
+cluster_name     = "kind-chaoslab"
+cluster_endpoint = "https://127.0.0.1:6443"
+kubeconfig_path  = "~/.kube/config"
+
+# Add node faults only when you want cluster-wide cordon rights granted.
+enabled_faults = [
+  "pod-kill", "container-kill", "cpu-stress", "memory-stress",
+  "disk-fill", "net-delay", "net-loss", "dns-blackhole",
+]
+
+# ── EKS with federated credentials — no stored kubeconfig at all ───────
+# auth_mode        = "oidc"
+# aws_region       = "ap-south-1"
+# eks_cluster_name = "platform-staging"
+#
+# Require approval before any live run. Find your numeric ID with:
+#   gh api user --jq .id
+# live_reviewer_user_ids = [12345678]

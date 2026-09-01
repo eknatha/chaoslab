@@ -3,584 +3,500 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChaosLab — Kubernetes Chaos Simulator</title>
-<meta name="description" content="Inject real failures into Kubernetes clusters. Learn resilience engineering. Part of EknathaLabs.">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,700;1,400&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<title>ChaosLab — break Kubernetes on purpose</title>
+<meta name="description" content="Run chaos experiments against a simulated Kubernetes cluster in your browser, or dispatch real faults at your own cluster through GitHub Actions. Part of EknathaLabs.">
+<link rel="canonical" href="https://chaoslab.eknathalabs.com/">
+<meta name="theme-color" content="#080a0d">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://chaoslab.eknathalabs.com/">
+<meta property="og:title" content="ChaosLab — break Kubernetes on purpose">
+<meta property="og:description" content="A Kubernetes cluster you can break in the browser, and a hypothesis engine that tells you whether it held.">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23080a0d'/%3E%3Cpath d='M9 22 L16 8 L23 22 M12 17 h8' stroke='%2300ff88' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <style>
 /* =====================================================
-   CHAOSLAB — Kubernetes Chaos Simulator
-   chaoslab.eknathalabs.com · EknathaLabs
-   Self-contained: all CSS inline, no external sheets
+   CHAOSLAB · chaoslab.eknathalabs.com · EknathaLabs
+   Self-contained. No build step, no external assets,
+   works offline once loaded.
    ===================================================== */
+:root{
+  --bg:#080a0d; --bg2:#0d1018; --bg3:#131720; --bg4:#1a2030;
+  --border:rgba(255,255,255,.06); --border2:rgba(255,255,255,.12);
+  --text:#dde4ef; --text2:#a0aebb; --muted:#586070;
+  --green:#00ff88; --cyan:#00d4ff; --red:#ff4455; --amber:#ffb020; --purple:#9d5ff0;
+  --mono:ui-monospace,'JetBrains Mono','SF Mono',Menlo,Consolas,'Courier New',monospace;
+  --display:'Syne',ui-sans-serif,system-ui,-apple-system,'Segoe UI',sans-serif;
+  --r:10px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;font-size:16px}
+body{font-family:var(--mono);background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,255,136,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,136,.022) 1px,transparent 1px);
+  background-size:44px 44px}
+body::after{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 600px 400px at 10% 15%,rgba(0,255,136,.04),transparent 70%),
+             radial-gradient(ellipse 500px 400px at 90% 85%,rgba(0,212,255,.03),transparent 70%)}
 
-:root {
-  --bg:      #080a0d;
-  --bg2:     #0d1018;
-  --bg3:     #131720;
-  --bg4:     #1a2030;
-  --border:  rgba(255,255,255,0.06);
-  --border2: rgba(255,255,255,0.12);
-  --text:    #dde4ef;
-  --text2:   #a0aebb;
-  --muted:   #586070;
-  --green:   #00ff88;
-  --cyan:    #00d4ff;
-  --red:     #ff4455;
-  --amber:   #ffb020;
-  --purple:  #9d5ff0;
-  --mono: 'JetBrains Mono', 'Courier New', monospace;
-  --display: 'Syne', sans-serif;
-  --r: 10px;
-}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--green);outline-offset:2px;border-radius:4px}
+button{font:inherit}
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html { scroll-behavior: smooth; font-size: 16px; }
+/* ── nav ── */
+nav{position:sticky;top:0;z-index:200;min-height:56px;padding:8px 1.25rem;display:flex;align-items:center;
+  justify-content:space-between;gap:1rem;flex-wrap:wrap;
+  background:rgba(8,10,13,.93);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+.brand-box{width:30px;height:30px;border-radius:6px;background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);
+  display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:11px;color:var(--green)}
+.brand-name{font-family:var(--display);font-weight:800;font-size:15px}
+.brand-name em{font-style:normal;color:var(--green)}
+.nav-right{display:flex;align-items:center;gap:.9rem;flex-wrap:wrap}
+.nav-right a{font-size:11px;color:var(--muted);text-decoration:none}
+.nav-right a:hover{color:var(--green)}
 
-body {
-  font-family: var(--mono);
-  background: var(--bg);
-  color: var(--text);
-  min-height: 100vh;
-  overflow-x: hidden;
-}
+/* mode switch */
+.modes{display:flex;background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:2px}
+.modes button{background:none;border:none;color:var(--muted);font-size:11px;padding:5px 12px;border-radius:5px;cursor:pointer}
+.modes button[aria-pressed="true"]{background:rgba(0,255,136,.12);color:var(--green)}
 
-/* Grid bg */
-body::before {
-  content: '';
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background-image:
-    linear-gradient(rgba(0,255,136,.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,255,136,.025) 1px, transparent 1px);
-  background-size: 44px 44px;
-}
+main{position:relative;z-index:1;max-width:1120px;margin:0 auto;padding:0 1.25rem 5rem}
 
-/* Glow orbs */
-body::after {
-  content: '';
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background:
-    radial-gradient(ellipse 600px 400px at 10% 20%, rgba(0,255,136,.04) 0%, transparent 70%),
-    radial-gradient(ellipse 500px 400px at 90% 80%, rgba(0,212,255,.03) 0%, transparent 70%);
-}
+/* ── hero: the cluster is the hero ── */
+.hero{padding:2.75rem 0 1.5rem;max-width:640px}
+.hero h1{font-family:var(--display);font-weight:800;font-size:clamp(2.1rem,5.5vw,3.4rem);letter-spacing:-.035em;line-height:1.02;margin-bottom:.9rem}
+.hero p{font-size:13px;color:var(--text2);line-height:1.85;max-width:56ch}
 
-/* ── NAV ─────────────────────────────────────── */
-nav {
-  position: sticky; top: 0; z-index: 200;
-  height: 56px; padding: 0 1.5rem;
-  display: flex; align-items: center; justify-content: space-between;
-  background: rgba(8,10,13,.92); backdrop-filter: blur(16px);
-  border-bottom: 1px solid var(--border);
-}
+.slabel{font-size:10px;color:var(--muted);letter-spacing:.16em;text-transform:uppercase;margin:2.25rem 0 12px;display:flex;align-items:center;gap:8px}
+.slabel::before{content:'';width:22px;height:1px;background:var(--green)}
+.slabel .hint{text-transform:none;letter-spacing:0;margin-left:auto;font-size:10px;opacity:.8}
 
-.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
-.brand-box {
-  width: 30px; height: 30px; border-radius: 6px;
-  background: rgba(0,255,136,.1); border: 1px solid rgba(0,255,136,.3);
-  display: flex; align-items: center; justify-content: center;
-  font-family: var(--display); font-weight: 800; font-size: 11px; color: var(--green);
-  letter-spacing: -.01em;
-}
-.brand-name { font-family: var(--display); font-weight: 800; font-size: 15px; color: var(--text); }
-.brand-name em { font-style: normal; color: var(--green); }
-.brand-pill {
-  font-size: 9px; letter-spacing: .12em; text-transform: uppercase;
-  color: var(--green); border: 1px solid rgba(0,255,136,.3);
-  padding: 2px 6px; border-radius: 3px; opacity: .75;
-}
+/* ── cluster canvas ── */
+.cluster{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.cluster-bar{display:flex;align-items:center;gap:14px;padding:10px 14px;background:var(--bg3);border-bottom:1px solid var(--border);flex-wrap:wrap}
+.clock{font-size:11px;color:var(--muted)}
+.clock b{color:var(--green);font-weight:500}
+.metrics{display:flex;gap:16px;margin-left:auto;flex-wrap:wrap}
+.metric{display:flex;align-items:baseline;gap:6px;font-size:11px;color:var(--muted)}
+.metric b{font-family:var(--display);font-size:15px;font-weight:800;color:var(--text)}
+.metric.bad b{color:var(--red)} .metric.warn b{color:var(--amber)} .metric.good b{color:var(--green)}
 
-.nav-right { display: flex; align-items: center; gap: 1rem; }
-.nav-right a { font-size: 11px; color: var(--muted); text-decoration: none; transition: color .2s; }
-.nav-right a:hover { color: var(--green); }
+.nodes{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border)}
+@media(max-width:640px){.nodes{grid-template-columns:1fr}}
+.node{background:var(--bg2);padding:12px 14px;min-height:132px}
+.node.cordoned{background:repeating-linear-gradient(45deg,var(--bg2),var(--bg2) 8px,rgba(255,68,85,.05) 8px,rgba(255,68,85,.05) 16px)}
+.node-hd{display:flex;align-items:center;gap:8px;margin-bottom:10px;font-size:11px}
+.node-nm{color:var(--text2)}
+.node-zone{font-size:9px;color:var(--muted);border:1px solid var(--border2);border-radius:3px;padding:1px 5px}
+.node-tag{font-size:9px;margin-left:auto;padding:1px 6px;border-radius:3px}
+.t-cord{background:rgba(255,68,85,.12);color:var(--red)}
+.t-net{background:rgba(157,95,240,.12);color:var(--purple)}
+.t-cpu{background:rgba(255,176,32,.12);color:var(--amber)}
+.pods{display:flex;flex-wrap:wrap;gap:6px}
+.pod{width:56px;padding:5px 0;border-radius:5px;text-align:center;font-size:9px;letter-spacing:.02em;
+  border:1px solid var(--border2);background:var(--bg4);color:var(--text2);transition:background .25s,border-color .25s,opacity .25s}
+.pod.ready{background:rgba(0,255,136,.12);border-color:rgba(0,255,136,.35);color:var(--green)}
+.pod.starting{background:rgba(0,212,255,.1);border-color:rgba(0,212,255,.3);color:var(--cyan)}
+.pod.term{background:rgba(255,68,85,.1);border-color:rgba(255,68,85,.3);color:var(--red);opacity:.6}
+.pod.crash{background:rgba(255,68,85,.18);border-color:var(--red);color:var(--red)}
+.pod.pending{border-style:dashed;color:var(--muted)}
+.pod-empty{font-size:10px;color:var(--muted)}
 
-.live-pill {
-  display: flex; align-items: center; gap: 5px;
-  font-size: 10px; padding: 3px 9px; border-radius: 4px;
-  background: rgba(0,255,136,.07); color: var(--green);
-  border: 1px solid rgba(0,255,136,.2);
-}
-.live-dot {
-  width: 5px; height: 5px; border-radius: 50%; background: var(--green);
-  animation: pulse 1.8s ease infinite;
-}
-@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.25;transform:scale(.85)} }
+/* sparkline */
+.spark{padding:10px 14px;border-top:1px solid var(--border);background:var(--bg2)}
+.spark svg{width:100%;height:64px;display:block}
+.spark-key{display:flex;gap:14px;font-size:9.5px;color:var(--muted);margin-top:6px}
+.spark-key i{display:inline-block;width:14px;height:2px;vertical-align:middle;margin-right:5px}
 
-/* ── MAIN ────────────────────────────────────── */
-main {
-  position: relative; z-index: 1;
-  max-width: 1080px; margin: 0 auto;
-  padding: 0 1.5rem 5rem;
-}
+/* ── panels ── */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.panel-hd{padding:11px 16px;background:var(--bg3);border-bottom:1px solid var(--border);font-size:11.5px;color:var(--text2);display:flex;align-items:center;gap:8px}
+.panel-hd .sub{margin-left:auto;font-size:10px;color:var(--muted)}
+.panel-bd{padding:1.1rem 1.15rem;display:flex;flex-direction:column;gap:13px}
 
-/* ── HERO ────────────────────────────────────── */
-.hero { padding: 4rem 0 3rem; text-align: center; }
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:10.5px;color:var(--muted)}
+.field input,.field select{background:var(--bg);border:1px solid var(--border);color:var(--text);padding:8px 11px;
+  border-radius:6px;font-family:var(--mono);font-size:12px;outline:none;-webkit-appearance:none;appearance:none;width:100%}
+.field input:focus,.field select:focus{border-color:var(--green)}
+.field select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+.hint{font-size:10px;color:var(--muted);line-height:1.6}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:480px){.frow{grid-template-columns:1fr}}
 
-.hero-eyebrow {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
-  color: var(--green); border: 1px solid rgba(0,255,136,.2);
-  padding: 5px 14px; border-radius: 20px; background: rgba(0,255,136,.04);
-  margin-bottom: 1.75rem;
-}
-.hero-eyebrow::before {
-  content: '';
-  width: 5px; height: 5px; border-radius: 50%;
-  background: var(--green); animation: pulse 1.8s ease infinite;
-}
+/* toggles as rows */
+.trow{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)}
+.trow:last-child{border-bottom:none}
+.trow .tl{font-size:11.5px}
+.trow .td{font-size:10px;color:var(--muted);margin-top:2px;line-height:1.5}
+.trow .tx{flex:1}
+.tog{position:relative;width:34px;height:19px;flex-shrink:0}
+.tog input{position:absolute;opacity:0;width:34px;height:19px;margin:0;cursor:pointer;z-index:2}
+.tog-track{position:absolute;inset:0;border-radius:10px;background:rgba(88,96,112,.35);transition:background .2s}
+.tog input:checked+.tog-track{background:rgba(0,255,136,.3)}
+.tog-thumb{position:absolute;top:3px;left:3px;width:13px;height:13px;border-radius:50%;background:var(--muted);pointer-events:none;transition:transform .2s,background .2s}
+.tog input:checked~.tog-thumb{transform:translateX(15px);background:var(--green)}
+.tog input:focus-visible+.tog-track{outline:2px solid var(--green);outline-offset:2px}
 
-.hero h1 {
-  font-family: var(--display); font-weight: 800;
-  font-size: clamp(2.6rem, 7vw, 5rem);
-  letter-spacing: -.04em; line-height: 1;
-  margin-bottom: 1.25rem; color: var(--text);
-}
-.hero h1 .hl { color: var(--green); }
+/* ── fault picker ── */
+.faults{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+@media(max-width:900px){.faults{grid-template-columns:repeat(3,1fr)}}
+@media(max-width:560px){.faults{grid-template-columns:repeat(2,1fr)}}
+.fc{background:var(--bg2);padding:.95rem .85rem;cursor:pointer;text-align:left;border:none;color:inherit;
+  display:flex;flex-direction:column;gap:6px;position:relative;transition:background .15s}
+.fc::after{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:var(--green);transform:scaleX(0);transition:transform .18s}
+.fc:hover{background:var(--bg3)}
+.fc[aria-pressed="true"]{background:var(--bg3)}
+.fc[aria-pressed="true"]::after{transform:scaleX(1)}
+.fc-ico{font-size:15px;color:var(--green);line-height:1}
+.fc-nm{font-family:var(--display);font-weight:700;font-size:12.5px}
+.fc-tests{font-size:10px;color:var(--muted);line-height:1.55}
 
-.hero-sub {
-  font-size: 13px; color: var(--text2); line-height: 1.9;
-  max-width: 480px; margin: 0 auto 2.5rem;
-}
+.fault-detail{background:var(--bg2);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--r) var(--r);
+  padding:.95rem 1.15rem;font-size:11.5px;color:var(--text2);line-height:1.75}
 
-.hero-stats {
-  display: flex; justify-content: center; gap: 0;
-  border: 1px solid var(--border); border-radius: var(--r);
-  overflow: hidden; max-width: 560px; margin: 0 auto;
-}
-.hstat {
-  flex: 1; padding: 1.1rem .5rem; text-align: center;
-  border-right: 1px solid var(--border); background: var(--bg2);
-}
-.hstat:last-child { border-right: none; }
-.hstat-n {
-  display: block; font-family: var(--display); font-weight: 800;
-  font-size: 1.5rem; color: var(--green); line-height: 1; margin-bottom: 3px;
-}
-.hstat-l { display: block; font-size: 9px; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; }
+/* ── run bar ── */
+.runbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:1.25rem}
+.btn{padding:9px 17px;border-radius:6px;font-family:var(--mono);font-size:12px;font-weight:700;cursor:pointer;
+  border:1px solid transparent;display:inline-flex;align-items:center;gap:7px;text-decoration:none;transition:background .16s,border-color .16s}
+.btn-run{background:var(--green);color:#000}
+.btn-run:hover{background:#00e878}
+.btn-run:disabled{background:rgba(0,255,136,.2);color:rgba(0,0,0,.45);cursor:not-allowed}
+.btn-stop{background:rgba(255,68,85,.1);color:var(--red);border-color:rgba(255,68,85,.28)}
+.btn-stop:hover{background:rgba(255,68,85,.2)}
+.btn-q{background:transparent;color:var(--muted);border-color:var(--border)}
+.btn-q:hover{border-color:var(--green);color:var(--green)}
+.runbar .sp{margin-left:auto;font-size:10.5px;color:var(--muted)}
 
-/* ── SECTION LABEL ───────────────────────────── */
-.slabel {
-  font-size: 10px; color: var(--muted); letter-spacing: .18em;
-  text-transform: uppercase; margin-bottom: 14px;
-  display: flex; align-items: center; gap: 8px;
-}
-.slabel::before { content: ''; display: block; width: 24px; height: 1px; background: var(--green); }
+/* ── terminal ── */
+.terminal{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-top:1.25rem}
+.term-bar{padding:9px 14px;background:var(--bg3);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.tdot{width:10px;height:10px;border-radius:50%}
+.tdot.r{background:#ff5f57}.tdot.y{background:#febc2e}.tdot.g{background:#28c840}
+.term-ttl{flex:1;text-align:center;font-size:11px;color:var(--muted)}
+.term-st{font-size:10px;color:var(--muted)}
+.term-body{padding:12px 16px;font-size:11.5px;line-height:1.95;min-height:150px;max-height:320px;overflow-y:auto}
+.term-body::-webkit-scrollbar{width:4px}
+.term-body::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.ll{display:flex;gap:13px}
+.lt{color:var(--muted);flex-shrink:0;user-select:none}
+.ok{color:var(--green)}.info{color:var(--cyan)}.warn{color:var(--amber)}.err{color:var(--red)}.dim{color:var(--muted)}
 
-/* ── ALERT ───────────────────────────────────── */
-.alert {
-  display: flex; align-items: flex-start; gap: 12px;
-  padding: 12px 16px; border-radius: 8px; margin-bottom: 1.5rem;
-  font-size: 12px; line-height: 1.7;
-  background: rgba(255,176,32,.05); border: 1px solid rgba(255,176,32,.2); color: #c89020;
-}
-.alert-icon { font-size: 14px; flex-shrink: 0; }
-.alert a { color: var(--amber); }
-.alert code { background: rgba(255,255,255,.07); padding: 1px 5px; border-radius: 3px; font-size: .9em; }
-.alert-x { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; padding: 0 2px; flex-shrink: 0; line-height: 1; }
-.alert-x:hover { color: var(--text); }
+/* ── verdict ── */
+.verdict{margin-top:1.25rem;border-radius:var(--r);border:1px solid var(--border);background:var(--bg2);overflow:hidden;display:none}
+.verdict.show{display:block}
+.v-hd{padding:14px 18px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--border)}
+.v-badge{font-family:var(--display);font-weight:800;font-size:13px;padding:4px 12px;border-radius:5px}
+.v-pass{background:rgba(0,255,136,.12);color:var(--green)}
+.v-fail{background:rgba(255,68,85,.12);color:var(--red)}
+.v-abort{background:rgba(255,176,32,.12);color:var(--amber)}
+.v-ttl{font-size:12.5px;color:var(--text2)}
+.v-bd{padding:14px 18px;font-size:11.5px;line-height:1.85;color:var(--text2)}
+.v-bd ul{margin:8px 0 0 18px}
+.v-bd li{margin-bottom:5px}
+.pm{border-top:1px solid var(--border);padding:14px 18px;display:none}
+.pm.show{display:block}
+.pm-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:11px}
+.pm-bar .t{font-size:11.5px;color:var(--text2);flex:1}
+.pm pre{background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:13px 15px;
+  font-size:11px;line-height:1.75;max-height:340px;overflow:auto;white-space:pre-wrap;word-break:break-word;color:var(--text2)}
+.pm pre::-webkit-scrollbar{width:4px}
+.pm pre::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.v-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border);border-top:1px solid var(--border)}
+@media(max-width:560px){.v-stats{grid-template-columns:1fr 1fr}}
+.v-stat{background:var(--bg2);padding:12px 14px}
+.v-stat b{display:block;font-family:var(--display);font-size:16px;font-weight:800;margin-bottom:3px}
+.v-stat span{font-size:9.5px;color:var(--muted)}
 
-/* ── FAULT CARDS ─────────────────────────────── */
-.fault-grid {
-  display: grid; grid-template-columns: repeat(4, 1fr);
-  gap: 0; background: var(--border);
-  border: 1px solid var(--border); border-radius: var(--r);
-  overflow: hidden; margin-bottom: 2rem;
-}
-@media(max-width:800px){ .fault-grid { grid-template-columns: 1fr 1fr; } }
-@media(max-width:480px){ .fault-grid { grid-template-columns: 1fr; } }
+/* ── safety ── */
+.safety{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+@media(max-width:760px){.safety{grid-template-columns:1fr 1fr}}
+@media(max-width:460px){.safety{grid-template-columns:1fr}}
+.sc{background:var(--bg2);padding:1rem 1.15rem}
+.sc-nm{font-family:var(--display);font-weight:700;font-size:12px;margin-bottom:6px}
+.sc-d{font-size:10.5px;color:var(--text2);line-height:1.7}
+.sc-d code{background:rgba(255,255,255,.06);padding:1px 4px;border-radius:3px}
 
-.fc {
-  background: var(--bg2); padding: 1.25rem; cursor: pointer;
-  transition: background .15s; position: relative;
-  border-right: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px;
-}
-.fc:last-child { border-right: none; }
-.fc::after {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
-  background: var(--green); transform: scaleX(0); transition: transform .2s;
-}
-.fc:hover { background: var(--bg3); }
-.fc:hover::after { transform: scaleX(1); }
-.fc.active { background: var(--bg3); }
-.fc.active::after { transform: scaleX(1); }
+/* ── live mode ── */
+.live-only,.sim-only{display:none}
+body[data-mode="live"] .live-only{display:block}
+body[data-mode="live"] .live-only.grid2{display:grid}
+body[data-mode="sim"] .sim-only{display:block}
+.notice{display:flex;gap:11px;padding:12px 15px;border-radius:8px;font-size:11.5px;line-height:1.75;margin-bottom:1.25rem}
+.notice-warn{background:rgba(255,176,32,.05);border:1px solid rgba(255,176,32,.2);color:#c89020}
+.notice-warn code{background:rgba(255,255,255,.07);padding:1px 5px;border-radius:3px}
+.notice a{color:var(--amber)}
 
-.fc-top { display: flex; justify-content: space-between; align-items: flex-start; }
-.fc-icon { font-size: 1.3rem; }
-.fc-badge {
-  font-size: 9px; padding: 2px 7px; border-radius: 3px; letter-spacing: .08em;
-  text-transform: uppercase; font-weight: 700;
-  background: rgba(0,255,136,.1); color: var(--green); border: 1px solid rgba(0,255,136,.2);
-}
-.fc-name { font-family: var(--display); font-weight: 700; font-size: 14px; }
-.fc-desc { font-size: 11px; color: var(--text2); line-height: 1.6; }
-.fc-tags { display: flex; gap: 6px; flex-wrap: wrap; }
-.fc-tag { font-size: 10px; color: var(--muted); background: var(--bg4); padding: 2px 7px; border-radius: 3px; }
+footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:1.5rem 1.25rem;max-width:1120px;margin:0 auto}
+.foot-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:10px}
+.foot-brand{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted)}
+.foot-brand a{color:var(--muted);text-decoration:none}
+.foot-brand a:hover{color:var(--green)}
+.foot-links{display:flex;gap:1rem;flex-wrap:wrap}
+.foot-links a{font-size:11px;color:var(--muted);text-decoration:none}
+.foot-links a:hover{color:var(--green)}
+.foot-copy{font-size:10px;color:var(--muted);opacity:.55}
 
-/* ── BUILDER ─────────────────────────────────── */
-.builder {
-  background: var(--bg2); border: 1px solid var(--border);
-  border-radius: var(--r); overflow: hidden; margin-bottom: 1.5rem;
-}
-.builder-top {
-  padding: 12px 18px; background: var(--bg3); border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px;
-}
-.builder-cmd { display: flex; align-items: center; gap: 8px; }
-.builder-prompt { color: var(--green); font-size: 13px; }
-.builder-slug { font-size: 12px; color: var(--muted); }
-
-.dryrow { display: flex; align-items: center; gap: 9px; }
-.tog { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
-.tog input { opacity: 0; width: 0; height: 0; }
-.tog-track {
-  position: absolute; inset: 0; border-radius: 10px; cursor: pointer;
-  background: rgba(88,96,112,.35); transition: background .2s;
-}
-.tog input:checked + .tog-track { background: rgba(0,255,136,.3); }
-.tog-thumb {
-  position: absolute; top: 3px; left: 3px; width: 14px; height: 14px;
-  border-radius: 50%; background: var(--muted); pointer-events: none;
-  transition: transform .2s, background .2s;
-}
-.tog input:checked ~ .tog-thumb { transform: translateX(16px); background: var(--green); }
-.tog-lbl { font-size: 11px; color: var(--muted); }
-
-.builder-body { padding: 1.25rem; display: flex; flex-direction: column; gap: 14px; }
-
-.frow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-@media(max-width:560px){ .frow { grid-template-columns: 1fr; } }
-
-.field { display: flex; flex-direction: column; gap: 5px; }
-.field label {
-  font-size: 10px; color: var(--muted); letter-spacing: .1em;
-  text-transform: uppercase; font-weight: 500;
-}
-.field input, .field select {
-  background: var(--bg); border: 1px solid var(--border);
-  color: var(--text); padding: 9px 12px;
-  border-radius: 6px; font-family: var(--mono); font-size: 12px;
-  outline: none; transition: border-color .2s;
-  -webkit-appearance: none; appearance: none;
-}
-.field input:focus, .field select:focus { border-color: var(--green); }
-.field select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; padding-right: 30px; }
-.field-hint { font-size: 10px; color: var(--muted); }
-
-.brow {
-  display: flex; gap: 10px; flex-wrap: wrap;
-  padding-top: 12px; border-top: 1px solid var(--border);
-}
-.btn {
-  padding: 9px 16px; border-radius: 6px; font-family: var(--mono);
-  font-size: 12px; font-weight: 700; cursor: pointer; border: none;
-  transition: all .18s; letter-spacing: .04em;
-  display: inline-flex; align-items: center; gap: 6px; text-decoration: none;
-}
-.btn-run { background: var(--green); color: #000; }
-.btn-run:hover { background: #00e878; transform: translateY(-1px); }
-.btn-run:disabled { background: rgba(0,255,136,.2); color: rgba(0,0,0,.4); cursor: not-allowed; transform: none; }
-.btn-rb { background: rgba(255,68,85,.1); color: var(--red); border: 1px solid rgba(255,68,85,.25); }
-.btn-rb:hover { background: rgba(255,68,85,.2); }
-.btn-gh { background: transparent; color: var(--muted); border: 1px solid var(--border); }
-.btn-gh:hover { border-color: var(--green); color: var(--green); }
-
-/* ── TERMINAL ────────────────────────────────── */
-.terminal {
-  background: var(--bg2); border: 1px solid var(--border);
-  border-radius: var(--r); overflow: hidden; margin-bottom: 1.5rem;
-}
-.term-bar {
-  padding: 9px 14px; background: var(--bg3); border-bottom: 1px solid var(--border);
-  display: flex; align-items: center; gap: 10px;
-}
-.tdot { width: 10px; height: 10px; border-radius: 50%; }
-.tdot.r { background: #ff5f57; } .tdot.y { background: #febc2e; } .tdot.g { background: #28c840; }
-.term-ttl { flex: 1; text-align: center; font-size: 11px; color: var(--muted); letter-spacing: .04em; }
-.term-st { font-size: 10px; color: var(--muted); }
-
-.term-body {
-  padding: 14px 18px; font-size: 11.5px; line-height: 2;
-  min-height: 160px; max-height: 340px; overflow-y: auto;
-}
-.term-body::-webkit-scrollbar { width: 4px; }
-.term-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-.ll { display: flex; gap: 14px; }
-.lt { color: var(--muted); flex-shrink: 0; user-select: none; }
-.ok  { color: var(--green); }
-.inf { color: var(--cyan); }
-.wrn { color: var(--amber); }
-.err { color: var(--red); }
-.dim { color: var(--muted); }
-
-/* ── RUNS ────────────────────────────────────── */
-.runs { display: flex; flex-direction: column; gap: 8px; margin-bottom: 2rem; }
-.run-empty {
-  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
-  padding: 1.5rem; text-align: center; font-size: 12px; color: var(--muted);
-}
-.run-row {
-  background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
-  padding: 10px 14px; display: flex; align-items: center; gap: 12px;
-  font-size: 11.5px; flex-wrap: wrap;
-}
-.rdot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-.rd-ok { background: var(--green); } .rd-dry { background: var(--muted); } .rd-err { background: var(--red); }
-.rfault { font-weight: 700; color: var(--text); min-width: 100px; }
-.rns, .rsel { font-size: 10.5px; color: var(--muted); }
-.rtime { margin-left: auto; font-size: 10.5px; color: var(--muted); }
-.rbadge { font-size: 9.5px; padding: 2px 7px; border-radius: 3px; }
-.rb-dry { background: rgba(88,96,112,.2); color: var(--muted); }
-.rb-live { background: rgba(0,255,136,.1); color: var(--green); }
-
-/* ── SAFETY CARDS ────────────────────────────── */
-.safety {
-  display: grid; grid-template-columns: repeat(3, 1fr);
-  gap: 0; background: var(--border);
-  border: 1px solid var(--border); border-radius: var(--r);
-  overflow: hidden; margin-bottom: 2rem;
-}
-@media(max-width:700px){ .safety { grid-template-columns: 1fr 1fr; } }
-@media(max-width:430px){ .safety { grid-template-columns: 1fr; } }
-
-.sc {
-  background: var(--bg2); padding: 1.1rem 1.2rem;
-  border-right: 1px solid var(--border); border-bottom: 1px solid var(--border);
-  display: flex; flex-direction: column; gap: 6px;
-}
-.sc:nth-child(3n){ border-right: none; }
-.sc-icon { font-size: 1.1rem; }
-.sc-name { font-family: var(--display); font-weight: 700; font-size: 12.5px; }
-.sc-desc { font-size: 11px; color: var(--text2); line-height: 1.6; }
-.sc-desc code { background: rgba(255,255,255,.07); padding: 1px 4px; border-radius: 3px; font-size: .9em; }
-
-/* ── FOOTER ──────────────────────────────────── */
-footer {
-  position: relative; z-index: 1;
-  border-top: 1px solid var(--border);
-  padding: 1.5rem; max-width: 1080px; margin: 0 auto;
-}
-.foot-inner {
-  display: flex; justify-content: space-between; align-items: center;
-  flex-wrap: wrap; gap: 1rem; margin-bottom: 10px;
-}
-.foot-brand { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
-.foot-brand a { color: var(--muted); text-decoration: none; }
-.foot-brand a:hover { color: var(--green); }
-.foot-links { display: flex; gap: 1rem; }
-.foot-links a { font-size: 11px; color: var(--muted); text-decoration: none; transition: color .2s; }
-.foot-links a:hover { color: var(--green); }
-.foot-copy { font-size: 10px; color: var(--muted); opacity: .5; }
-
-/* ── FADE-IN ─────────────────────────────────── */
-.fade { opacity: 0; transform: translateY(18px); transition: opacity .6s cubic-bezier(.22,1,.36,1), transform .6s cubic-bezier(.22,1,.36,1); }
-.fade.in { opacity: 1; transform: translateY(0); }
-.fade:nth-child(1){transition-delay:.05s}
-.fade:nth-child(2){transition-delay:.12s}
-.fade:nth-child(3){transition-delay:.19s}
-.fade:nth-child(4){transition-delay:.26s}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
-<body>
+<body data-mode="sim">
 
-<!-- NAV -->
 <nav>
-  <a href="#" class="brand">
-    <div class="brand-box">CL</div>
+  <a href="./" class="brand">
+    <span class="brand-box" aria-hidden="true">CL</span>
     <span class="brand-name">Chaos<em>Lab</em></span>
-    <span class="brand-pill">Beta</span>
   </a>
   <div class="nav-right">
-    <div class="live-pill"><span class="live-dot"></span><span id="nav-status">ready</span></div>
-    <a href="reports/index.html">Reports</a>
+    <div class="modes" role="group" aria-label="Run mode">
+      <button id="m-sim" aria-pressed="true" onclick="setMode('sim')">Simulator</button>
+      <button id="m-live" aria-pressed="false" onclick="setMode('live')">Live cluster</button>
+    </div>
+    <a href="linter.html">Resilience linter</a>
+    <a href="reports/">Reports</a>
     <a href="https://github.com/eknatha/chaoslab" target="_blank" rel="noopener">GitHub</a>
-    <a href="https://eknathalabs.com" target="_blank" rel="noopener">EknathaLabs ↗</a>
+    <a href="https://eknathalabs.com" target="_blank" rel="noopener">EknathaLabs</a>
   </div>
 </nav>
 
 <main>
 
-  <!-- HERO -->
-  <section class="hero">
-    <div class="hero-eyebrow">chaoslab.eknathalabs.com · built in public</div>
-    <h1>Kubernetes<br><span class="hl">Chaos Simulator</span></h1>
-    <p class="hero-sub">Inject real failures into your cluster. Learn resilience engineering by intentionally breaking things in a safe, controlled environment — powered entirely by GitHub Actions.</p>
-    <div class="hero-stats">
-      <div class="hstat"><span class="hstat-n">4</span><span class="hstat-l">Fault types</span></div>
-      <div class="hstat"><span class="hstat-n">100%</span><span class="hstat-l">GitHub native</span></div>
-      <div class="hstat"><span class="hstat-n">Auto</span><span class="hstat-l">Rollback</span></div>
-      <div class="hstat"><span class="hstat-n">Free</span><span class="hstat-l">Always</span></div>
+  <header class="hero">
+    <h1>Break Kubernetes on purpose</h1>
+    <p>Pick a fault, state what you expect to stay true, and watch whether it holds. The cluster below runs in your browser — no cluster, no credentials, nothing to install. When you want the real thing, switch to live mode and the same experiment is dispatched at your own cluster through GitHub Actions.</p>
+  </header>
+
+  <div class="notice notice-warn live-only" id="live-notice">
+    <span aria-hidden="true">&#9888;</span>
+    <div>
+      <strong>Live mode dispatches real faults at a real cluster.</strong>
+      It needs <code>KUBECONFIG_DATA</code> and <code>CLUSTER_CONTEXT</code> as repository secrets, plus a fine-grained token with Actions write access, entered below. The token is held in this browser tab only — it is never stored in the page, in the repository, or anywhere else.
+      <a href="https://github.com/eknatha/chaoslab#live-mode" target="_blank" rel="noopener">Setup guide</a>
+    </div>
+  </div>
+
+  <!-- ── cluster ── -->
+  <div class="slabel">Cluster <span class="hint" id="cluster-hint">three worker nodes, one zone each</span></div>
+  <section class="cluster" aria-label="Cluster state">
+    <div class="cluster-bar">
+      <span class="clock">t+<b id="clock">0</b>s</span>
+      <div class="metrics">
+        <span class="metric" id="m-ready"><b>4</b> ready</span>
+        <span class="metric" id="m-p95"><b>—</b> p95</span>
+        <span class="metric" id="m-err"><b>—</b> errors</span>
+      </div>
+    </div>
+    <div class="nodes" id="nodes"></div>
+    <div class="spark">
+      <svg id="spark" viewBox="0 0 600 64" preserveAspectRatio="none" role="img" aria-label="Latency and error rate over the last three minutes"></svg>
+      <div class="spark-key">
+        <span><i style="background:var(--cyan)"></i>p95 latency</span>
+        <span><i style="background:var(--red)"></i>error rate</span>
+        <span><i style="background:var(--green)"></i>ready pods</span>
+      </div>
     </div>
   </section>
 
-  <!-- SETUP ALERT -->
-  <div class="alert" id="setup-alert">
-    <span class="alert-icon">⚠</span>
-    <div>
-      <strong>First-time setup required.</strong>
-      Add <code>KUBECONFIG_DATA</code> and <code>CLUSTER_CONTEXT</code> as GitHub Secrets.
-      Then set <code>CONFIG.REPO</code> and <code>CONFIG.TOKEN</code> inside <code>chaos.js</code>.
-      &nbsp;<a href="https://github.com/eknatha/chaoslab#setup" target="_blank">README → Setup ↗</a>
-    </div>
-    <button class="alert-x" onclick="document.getElementById('setup-alert').style.display='none'">✕</button>
+  <!-- ── faults ── -->
+  <div class="slabel">Fault</div>
+  <div class="faults" id="faults" role="group" aria-label="Fault type"></div>
+  <p class="fault-detail" id="fault-detail"></p>
+
+  <!-- ── config ── -->
+  <div class="grid2" style="margin-top:1.25rem">
+
+    <section class="panel">
+      <div class="panel-hd">Experiment<span class="sub" id="exp-sub"></span></div>
+      <div class="panel-bd">
+        <div class="frow">
+          <div class="field">
+            <label for="dur">Duration (seconds)</label>
+            <input type="number" id="dur" value="60" min="10" max="900">
+          </div>
+          <div class="field">
+            <label for="blast">Blast radius</label>
+            <select id="blast">
+              <option value="10">10% of matching pods</option>
+              <option value="30" selected>30% of matching pods</option>
+              <option value="50">50% of matching pods</option>
+              <option value="100">every matching pod</option>
+            </select>
+            <span class="hint" id="blast-hint"></span>
+          </div>
+        </div>
+        <div class="field" id="mag-field">
+          <label for="mag" id="mag-label">Intensity</label>
+          <input type="number" id="mag" value="4" min="1" max="16">
+        </div>
+        <div class="frow live-only">
+          <div class="field">
+            <label for="ns">Namespace</label>
+            <input type="text" id="ns" value="default" placeholder="staging">
+            <span class="hint">kube-system and other control-plane namespaces are refused</span>
+          </div>
+          <div class="field">
+            <label for="sel">Label selector</label>
+            <input type="text" id="sel" placeholder="app=frontend">
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-hd">Hypothesis<span class="sub">what should stay true</span></div>
+      <div class="panel-bd">
+        <p class="hint">An experiment without a hypothesis is just an outage. State the steady state you expect to survive the fault; the run is graded against it and stopped if it breaks.</p>
+        <div class="frow">
+          <div class="field">
+            <label for="slo-p95">p95 latency stays under (ms)</label>
+            <input type="number" id="slo-p95" value="500" min="10" max="30000">
+          </div>
+          <div class="field">
+            <label for="slo-err">Error rate stays under (%)</label>
+            <input type="number" id="slo-err" value="5" min="0" max="100">
+          </div>
+        </div>
+        <div class="field">
+          <label for="slo-ready">Ready pods never drop below</label>
+          <input type="number" id="slo-ready" value="3" min="0" max="50">
+        </div>
+        <div class="trow">
+          <div class="tx">
+            <div class="tl">Stop the moment it breaks</div>
+            <div class="td">Removes the fault and rolls the namespace back rather than riding out the full duration.</div>
+          </div>
+          <span class="tog"><input type="checkbox" id="abort" checked><span class="tog-track"></span><span class="tog-thumb"></span></span>
+        </div>
+        <div class="field live-only">
+          <label for="probe">Steady-state probe</label>
+          <input type="text" id="probe" placeholder="svc:frontend:80/healthz">
+          <span class="hint">An external URL, or <code>svc:name:port/path</code> to probe through a port-forward from inside the cluster. Leave empty to grade on ready pods alone.</span>
+        </div>
+      </div>
+    </section>
   </div>
 
-  <!-- FAULT PICKER -->
-  <div class="slabel">01 — choose fault</div>
-  <div class="fault-grid" id="fault-grid">
-    <div class="fc active" data-w="pod-kill.yml" data-n="Pod Kill" onclick="pickFault(this)">
-      <div class="fc-top"><span class="fc-icon">💀</span><span class="fc-badge">live</span></div>
-      <div class="fc-name">Pod Kill</div>
-      <div class="fc-desc">Randomly deletes matching pods. Tests ReplicaSet self-healing and restart policies.</div>
-      <div class="fc-tags"><span class="fc-tag">⏱ 10–600s</span><span class="fc-tag">🎯 label selector</span></div>
-    </div>
-    <div class="fc" data-w="cpu-stress.yml" data-n="CPU Stress" onclick="pickFault(this)">
-      <div class="fc-top"><span class="fc-icon">🔥</span><span class="fc-badge">live</span></div>
-      <div class="fc-name">CPU Stress</div>
-      <div class="fc-desc">Saturates CPU with stress pods. Tests HPA autoscaling and resource limit enforcement.</div>
-      <div class="fc-tags"><span class="fc-tag">⏱ 10–600s</span><span class="fc-tag">⚙️ workers</span></div>
-    </div>
-    <div class="fc" data-w="net-delay.yml" data-n="Network Delay" onclick="pickFault(this)">
-      <div class="fc-top"><span class="fc-icon">🌐</span><span class="fc-badge">live</span></div>
-      <div class="fc-name">Network Delay</div>
-      <div class="fc-desc">Injects latency via <code>tc&nbsp;netem</code>. Tests timeouts and circuit breakers.</div>
-      <div class="fc-tags"><span class="fc-tag">⏱ 10–600s</span><span class="fc-tag">📡 ms delay</span></div>
-    </div>
-    <div class="fc" data-w="node-drain.yml" data-n="Node Drain" onclick="pickFault(this)">
-      <div class="fc-top"><span class="fc-icon">🖥️</span><span class="fc-badge">live</span></div>
-      <div class="fc-name">Node Drain</div>
-      <div class="fc-desc">Cordons and drains a worker node. Tests PodDisruptionBudgets and autoscaler response.</div>
-      <div class="fc-tags"><span class="fc-tag">⏱ 30–600s</span><span class="fc-tag">🔄 auto uncordon</span></div>
+  <!-- ── workload posture (simulator) ── -->
+  <div class="sim-only">
+    <div class="slabel">Workload <span class="hint">change the posture and run the same fault again</span></div>
+    <div class="grid2">
+      <section class="panel">
+        <div class="panel-hd">Capacity</div>
+        <div class="panel-bd">
+          <div class="frow">
+            <div class="field">
+              <label for="w-replicas">Replicas</label>
+              <input type="number" id="w-replicas" value="4" min="1" max="12">
+            </div>
+            <div class="field">
+              <label for="w-pdb">PodDisruptionBudget floor</label>
+              <input type="number" id="w-pdb" value="0" min="0" max="12">
+              <span class="hint">0 means no budget</span>
+            </div>
+          </div>
+          <div class="frow">
+            <div class="field">
+              <label for="w-cpu">CPU limit (millicores)</label>
+              <input type="number" id="w-cpu" value="0" min="0" max="4000" step="100">
+              <span class="hint">0 means unlimited</span>
+            </div>
+            <div class="field">
+              <label for="w-mem">Memory limit (MiB)</label>
+              <input type="number" id="w-mem" value="0" min="0" max="8192" step="64">
+              <span class="hint">0 means unlimited</span>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="panel">
+        <div class="panel-hd">Behaviour</div>
+        <div class="panel-bd" style="gap:0">
+          <div class="trow">
+            <div class="tx"><div class="tl">Readiness probe</div><div class="td">Holds traffic back until a new pod can actually serve it.</div></div>
+            <span class="tog"><input type="checkbox" id="w-readiness" checked><span class="tog-track"></span><span class="tog-thumb"></span></span>
+          </div>
+          <div class="trow">
+            <div class="tx"><div class="tl">Liveness probe</div><div class="td">Restarts a container that has stopped responding.</div></div>
+            <span class="tog"><input type="checkbox" id="w-liveness" checked><span class="tog-track"></span><span class="tog-thumb"></span></span>
+          </div>
+          <div class="trow">
+            <div class="tx"><div class="tl">Horizontal autoscaler</div><div class="td">Adds replicas when cluster CPU passes 70%, up to eight.</div></div>
+            <span class="tog"><input type="checkbox" id="w-hpa"><span class="tog-track"></span><span class="tog-thumb"></span></span>
+          </div>
+          <div class="trow">
+            <div class="tx"><div class="tl">Topology spread</div><div class="td">Keeps replicas balanced across zones instead of stacking them.</div></div>
+            <span class="tog"><input type="checkbox" id="w-spread"><span class="tog-track"></span><span class="tog-thumb"></span></span>
+          </div>
+        </div>
+      </section>
     </div>
   </div>
 
-  <!-- BUILDER -->
-  <div class="slabel">02 — configure experiment</div>
-  <div class="builder">
-    <div class="builder-top">
-      <div class="builder-cmd">
-        <span class="builder-prompt">$</span>
-        <span class="builder-slug" id="bslug">chaos run --fault pod-kill --dry-run</span>
-      </div>
-      <div class="dryrow">
-        <label class="tog">
-          <input type="checkbox" id="dry-run" checked onchange="syncDryLabel()">
-          <div class="tog-track"></div>
-          <div class="tog-thumb"></div>
-        </label>
-        <span class="tog-lbl" id="dry-lbl">🔵 Dry run ON — safe</span>
-      </div>
-    </div>
-    <div class="builder-body">
-
+  <!-- ── live credentials ── -->
+  <section class="panel live-only" style="margin-top:1.25rem">
+    <div class="panel-hd">GitHub<span class="sub">this browser tab only</span></div>
+    <div class="panel-bd">
       <div class="frow">
         <div class="field">
-          <label>Target namespace</label>
-          <input type="text" id="ns" value="default" placeholder="e.g. production">
-          <span class="field-hint">kube-system is always blocked</span>
+          <label for="repo">Repository</label>
+          <input type="text" id="repo" value="eknatha/chaoslab" placeholder="you/chaoslab">
+          <span class="hint">Fork the repository and point this at your own copy.</span>
         </div>
         <div class="field">
-          <label>Label selector</label>
-          <input type="text" id="sel" placeholder="e.g. app=frontend">
-          <span class="field-hint">Kubernetes label selector syntax</span>
+          <label for="token">Fine-grained token</label>
+          <input type="password" id="token" placeholder="github_pat_..." autocomplete="off">
+          <span class="hint">Needs Actions: write on that repository only. Kept in this tab's session storage and cleared when you close it.</span>
         </div>
       </div>
-
-      <div class="frow">
-        <div class="field">
-          <label>Duration (seconds)</label>
-          <input type="number" id="dur" value="60" min="10" max="600">
-          <span class="field-hint">Time before auto-rollback check</span>
-        </div>
-        <div class="field">
-          <label>Blast radius</label>
-          <select id="blast">
-            <option value="10">10% of matching pods</option>
-            <option value="30" selected>30% of matching pods (default)</option>
-            <option value="50">50% of matching pods</option>
-            <option value="100">100% — all matching pods</option>
-          </select>
-          <span class="field-hint">Max pods affected</span>
-        </div>
-      </div>
-
-      <!-- CPU / Net extra fields (shown conditionally) -->
-      <div class="frow" id="xrow" style="display:none">
-        <div class="field">
-          <label>CPU workers</label>
-          <input type="number" id="cpuw" value="4" min="1" max="16">
-          <span class="field-hint">Parallel CPU stress threads</span>
-        </div>
-        <div class="field">
-          <label>Network delay (ms)</label>
-          <input type="number" id="dms" value="500" min="50" max="5000">
-          <span class="field-hint">Milliseconds of injected latency</span>
-        </div>
-      </div>
-
-      <div class="brow">
-        <button class="btn btn-run" id="run-btn" onclick="runExperiment()">▶ Run Experiment</button>
-        <button class="btn btn-rb"  onclick="emergencyRollback()">⚠ Emergency Rollback</button>
-        <button class="btn btn-gh"  onclick="clearLog()">✕ Clear log</button>
-        <a class="btn btn-gh" href="https://github.com/eknatha/chaoslab/actions" target="_blank" rel="noopener">Actions ↗</a>
-      </div>
-
     </div>
+  </section>
+
+  <div class="runbar">
+    <button class="btn btn-run" id="run-btn" onclick="runExperiment()">Run experiment</button>
+    <button class="btn btn-stop" id="stop-btn" onclick="stopExperiment()">Stop and roll back</button>
+    <button class="btn btn-q" onclick="resetAll()">Reset cluster</button>
+    <button class="btn btn-q" onclick="clearLog()">Clear log</button>
+    <a class="btn btn-q live-only" id="actions-link" href="https://github.com/eknatha/chaoslab/actions" target="_blank" rel="noopener">Open Actions</a>
+    <span class="sp sim-only">Simulated time runs at 8&times; — a 60 second experiment takes about 8 seconds.</span>
   </div>
 
-  <!-- TERMINAL -->
-  <div class="slabel">03 — experiment log</div>
+  <!-- ── verdict ── -->
+  <section class="verdict" id="verdict" aria-live="polite">
+    <div class="v-hd"><span class="v-badge" id="v-badge">—</span><span class="v-ttl" id="v-ttl"></span></div>
+    <div class="v-bd" id="v-bd"></div>
+    <div class="v-stats" id="v-stats"></div>
+    <div class="pm" id="pm">
+      <div class="pm-bar">
+        <span class="t">Incident report — the writeup you would have produced if this failure had happened on its own.</span>
+        <button class="btn btn-q" type="button" onclick="copyPostmortem()" id="pm-copy">Copy markdown</button>
+        <button class="btn btn-q" type="button" onclick="downloadPostmortem()">Download</button>
+      </div>
+      <pre id="pm-text"></pre>
+    </div>
+  </section>
+
+  <!-- ── log ── -->
+  <div class="slabel">Log</div>
   <div class="terminal">
     <div class="term-bar">
-      <span class="tdot r"></span><span class="tdot y"></span><span class="tdot g"></span>
-      <span class="term-ttl">chaoslab — stdout</span>
+      <span class="tdot r" aria-hidden="true"></span><span class="tdot y" aria-hidden="true"></span><span class="tdot g" aria-hidden="true"></span>
+      <span class="term-ttl">chaoslab</span>
       <span class="term-st" id="term-st">idle</span>
     </div>
-    <div class="term-body" id="log">
-      <div class="ll"><span class="lt">--:--:--</span><span class="dim">ChaosLab ready. Select a fault, configure your experiment, then click Run.</span></div>
-      <div class="ll"><span class="lt">--:--:--</span><span class="dim">Dry run is ON by default — safe to click without affecting your cluster.</span></div>
-    </div>
+    <div class="term-body" id="log" role="log" aria-live="polite"></div>
   </div>
 
-  <!-- RECENT RUNS -->
-  <div class="slabel">04 — recent runs</div>
-  <div class="runs" id="runs">
-    <div class="run-empty">No experiments yet. Run your first chaos experiment above.</div>
-  </div>
-
-  <!-- SAFETY -->
-  <div class="slabel">05 — safety guardrails</div>
+  <!-- ── safety ── -->
+  <div class="slabel">Guardrails</div>
   <div class="safety">
-    <div class="sc fade">
-      <span class="sc-icon">🛡️</span>
-      <div class="sc-name">kube-system blocked</div>
-      <div class="sc-desc">Hardcoded protection — no experiment can target the kube-system namespace under any condition.</div>
-    </div>
-    <div class="sc fade">
-      <span class="sc-icon">🎯</span>
-      <div class="sc-name">Blast radius cap</div>
-      <div class="sc-desc">Maximum 30% of matching pods by default. Configurable, but never more than you explicitly allow.</div>
-    </div>
-    <div class="sc fade">
-      <span class="sc-icon">🔁</span>
-      <div class="sc-name">Auto rollback</div>
-      <div class="sc-desc">Every workflow has an <code>always:</code> cleanup block. Chaos artefacts are removed on success or failure.</div>
-    </div>
-    <div class="sc fade">
-      <span class="sc-icon">🔵</span>
-      <div class="sc-name">Dry run default</div>
-      <div class="sc-desc">Dry run is ON by default. Every experiment shows exactly what it will do before doing anything.</div>
-    </div>
-    <div class="sc fade">
-      <span class="sc-icon">📋</span>
-      <div class="sc-name">Full audit trail</div>
-      <div class="sc-desc">Every run is logged in GitHub Actions history. JSON reports saved as artifacts for 30 days.</div>
-    </div>
-    <div class="sc fade">
-      <span class="sc-icon">⚡</span>
-      <div class="sc-name">Emergency rollback</div>
-      <div class="sc-desc">One-click rollback cleans all chaos artefacts, uncordons nodes, and restarts deployments instantly.</div>
-    </div>
+    <div class="sc"><div class="sc-nm">Protected namespaces</div><div class="sc-d">Experiments are refused against <code>kube-system</code>, <code>kube-public</code>, <code>kube-node-lease</code>, <code>cert-manager</code>, <code>istio-system</code> and <code>gatekeeper-system</code>. Whitespace and casing tricks are stripped before the check, and setting the <code>CHAOS_ALLOWED_NAMESPACES</code> repository variable narrows it further to an allowlist.</div></div>
+    <div class="sc"><div class="sc-nm">Bounded blast radius</div><div class="sc-d">Pod-level faults hit a random sample capped at the percentage you choose. Node-level faults are pinned by node affinity to the nodes already hosting your target pods, and never to a control-plane node.</div></div>
+    <div class="sc"><div class="sc-nm">Abort on breach</div><div class="sc-d">The hypothesis is re-evaluated every ten seconds during a live run. The first breach removes the fault and triggers a full rollback rather than waiting out the duration.</div></div>
+    <div class="sc"><div class="sc-nm">Cleanup that survives failure</div><div class="sc-d">Removal runs on success, failure, timeout and cancellation. Network emulation carries a signal trap and a follow-up scrub job, so a node is never left with a stray <code>tc</code> queue.</div></div>
+    <div class="sc"><div class="sc-nm">One experiment at a time</div><div class="sc-d">Runs are serialised per namespace by a concurrency group. Overlapping faults produce results nobody can attribute to a cause.</div></div>
+    <div class="sc"><div class="sc-nm">Approval before live</div><div class="sc-d">Live runs execute in the <code>chaos-live</code> environment. Add required reviewers to it and every real experiment waits for a human before it starts.</div></div>
   </div>
 
 </main>
@@ -588,227 +504,1382 @@ footer {
 <footer>
   <div class="foot-inner">
     <div class="foot-brand">
-      <div class="brand-box" style="width:22px;height:22px;font-size:9px">CL</div>
-      <span>ChaosLab · Part of <a href="https://eknathalabs.com">EknathaLabs</a></span>
+      <span class="brand-box" style="width:22px;height:22px;font-size:9px" aria-hidden="true">CL</span>
+      <span>ChaosLab, part of <a href="https://eknathalabs.com">EknathaLabs</a></span>
     </div>
     <div class="foot-links">
-      <a href="reports/index.html">Reports</a>
-      <a href="https://github.com/eknatha/chaoslab" target="_blank" rel="noopener">GitHub</a>
+      <a href="linter.html">Resilience linter</a>
+      <a href="reports/">Reports</a>
+      <a href="https://github.com/eknatha/chaoslab" target="_blank" rel="noopener">Source</a>
       <a href="https://kubelab.eknathalabs.com" target="_blank" rel="noopener">KubeLab</a>
-      <a href="https://eknathalabs.com" target="_blank" rel="noopener">EknathaLabs</a>
     </div>
   </div>
-  <div class="foot-copy">© 2026 EknathaLabs · MIT License · Built in public 🚧</div>
+  <div class="foot-copy">MIT licensed. Built in public.</div>
 </footer>
 
 <script>
-// ============================================================
-//  CHAOSLAB — chaos engine
-//  ① Set REPO to "username/chaoslab"
-//  ② Set TOKEN to a fine-grained PAT (Actions:write scope)
-//     github.com/settings/tokens → Fine-grained → Actions write
-//  ③ NEVER commit a real token to a public repo.
-//     For production, prompt the user to enter it at runtime.
-// ============================================================
-const CFG = {
-  REPO:  'eknatha/chaoslab',   // ← YOUR GITHUB USERNAME/REPO
-  TOKEN: '',                    // ← YOUR FINE-GRAINED PAT
+/* ChaosLab simulation engine.
+   A small Kubernetes control plane: scheduling, ReplicaSet reconciliation,
+   probes, PodDisruptionBudgets, HPA, and a traffic model that produces the
+   latency and error numbers the hypothesis is judged against.
+   Pure logic — no DOM, no dependencies. One simulated tick is one second. */
+
+const FAULTS = {
+  'pod-kill': {
+    label: 'Pod kill', icon: '\u2620', blast: true,
+    mag: null,
+    tests: 'ReplicaSet self-healing, PodDisruptionBudgets, startup time',
+    desc: 'Evicts a random sample of matching pods. If a PodDisruptionBudget would drop the workload below its floor, the eviction is refused — which is a pass, not a failure.'
+  },
+  'container-kill': {
+    label: 'Container kill', icon: '\u25a0', blast: true,
+    mag: null,
+    tests: 'restartPolicy, liveness probes, crash loop backoff',
+    desc: 'Kills PID 1 inside the container without deleting the pod. The kubelet restarts it in place, so this exercises restart behaviour rather than rescheduling.'
+  },
+  'cpu-stress': {
+    label: 'CPU stress', icon: '\u25b2', blast: true,
+    mag: { label: 'Workers', def: 4, min: 1, max: 16, unit: '' },
+    tests: 'CPU limits, HPA reaction time, request latency under contention',
+    desc: 'Saturates the CPU on the nodes hosting the target pods. Without limits the noisy neighbour takes everything; with an HPA, watch how long it takes to react.'
+  },
+  'memory-stress': {
+    label: 'Memory pressure', icon: '\u25c6', blast: true,
+    mag: { label: 'Allocate', def: 512, min: 64, max: 4096, unit: 'MiB' },
+    tests: 'memory limits, OOMKilled handling, crash loop backoff',
+    desc: 'Allocates more memory than the limit permits. The kernel kills the container, the kubelet restarts it, and repeated kills push the pod into CrashLoopBackOff.'
+  },
+  'disk-fill': {
+    label: 'Disk fill', icon: '\u25ac', blast: false,
+    mag: { label: 'Write', def: 1024, min: 128, max: 8192, unit: 'MiB' },
+    tests: 'ephemeral storage limits, eviction thresholds, write paths',
+    desc: 'Fills ephemeral storage on a node. Once the kubelet crosses its eviction threshold it starts evicting pods by QoS class, lowest first.'
+  },
+  'net-delay': {
+    label: 'Network delay', icon: '\u2248', blast: false,
+    mag: { label: 'Delay', def: 500, min: 10, max: 3000, unit: 'ms' },
+    tests: 'client timeouts, circuit breakers, readiness probe timeouts',
+    desc: 'Adds latency on the nodes hosting the target pods only. Slow responses are worse than none: they hold connections open until something upstream gives up.'
+  },
+  'net-loss': {
+    label: 'Packet loss', icon: '\u2591', blast: false,
+    mag: { label: 'Loss', def: 15, min: 1, max: 80, unit: '%' },
+    tests: 'retry policy, TCP behaviour, probe failure thresholds',
+    desc: 'Drops a percentage of packets. Retries mask small losses and amplify large ones — this is where a retry storm starts.'
+  },
+  'dns-blackhole': {
+    label: 'DNS blackhole', icon: '\u2300', blast: false,
+    mag: null,
+    tests: 'DNS caching, connection reuse, dependency failure handling',
+    desc: 'Cuts the target pods off from cluster DNS. The most common real outage nobody rehearses: everything looks healthy until a connection needs a fresh lookup.'
+  },
+  'node-drain': {
+    label: 'Node drain', icon: '\u2b1a', blast: false,
+    mag: null,
+    tests: 'PodDisruptionBudgets, spare capacity, rescheduling time',
+    desc: 'Cordons a node and evicts its pods. Whether this hurts depends entirely on whether the rest of the cluster has room to take them.'
+  },
+  'zone-outage': {
+    label: 'Zone outage', icon: '\u2b21', blast: false,
+    mag: null,
+    tests: 'topology spread constraints, multi-zone capacity',
+    desc: 'Takes every node in one availability zone out at once. Pods concentrated in a single zone disappear together.'
+  }
 };
 
-let selWorkflow  = 'pod-kill.yml';
-let selFaultName = 'Pod Kill';
-const runHistory = [];
+const DEFAULT_SPEC = {
+  replicas: 4,
+  cpuRequest: 200,
+  cpuLimit: 0,          // 0 means no limit set
+  memLimit: 0,
+  minAvailable: 0,      // 0 means no PodDisruptionBudget
+  readiness: true,
+  liveness: true,
+  hpa: false,
+  hpaMax: 8,
+  spread: false,
+  gracePeriod: 30
+};
 
-// ── Fault selector ──────────────────────────────
-function pickFault(el) {
-  document.querySelectorAll('.fc').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  selWorkflow  = el.dataset.w;
-  selFaultName = el.dataset.n;
+let seq = 0;
+const rid = () => (++seq).toString(36).padStart(3, '0');
 
-  const slug = selWorkflow.replace('.yml','');
-  document.getElementById('bslug').textContent =
-    `chaos run --fault ${slug}${document.getElementById('dry-run').checked ? ' --dry-run' : ''}`;
-
-  // Show extra fields for cpu/net
-  document.getElementById('xrow').style.display =
-    (slug === 'cpu-stress' || slug === 'net-delay') ? 'grid' : 'none';
-
-  tlog(`Selected fault: ${selFaultName}`, 'inf');
+function mulberry(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
 }
 
-// ── Dry-run label sync ──────────────────────────
-function syncDryLabel() {
-  const on = document.getElementById('dry-run').checked;
-  const lbl = document.getElementById('dry-lbl');
-  lbl.textContent = on ? '🔵 Dry run ON — safe' : '🔴 Dry run OFF — LIVE';
-  lbl.style.color = on ? '' : 'var(--red)';
-  const slug = selWorkflow.replace('.yml','');
-  document.getElementById('bslug').textContent =
-    `chaos run --fault ${slug}${on ? ' --dry-run' : ''}`;
+function createCluster(spec = {}, seed = 42) {
+  seq = 0;
+  const s = Object.assign({}, DEFAULT_SPEC, spec);
+  const zones = ['a', 'b', 'c'];
+  const nodes = [];
+  for (let i = 1; i <= 3; i++) {
+    nodes.push({
+      name: 'worker-' + i,
+      zone: zones[(i - 1) % 3],
+      cpuCap: 2000,
+      memCap: 4096,
+      diskPct: 20,
+      cordoned: false,
+      delayMs: 0,
+      lossPct: 0,
+      dnsBlocked: false
+    });
+  }
+  const st = {
+    t: 0,
+    rand: mulberry(seed),
+    spec: s,
+    nodes,
+    pods: [],
+    stressors: [],
+    fault: null,
+    history: [],
+    events: [],
+    samples: [],
+    verdict: null,
+    running: false
+  };
+  for (let i = 0; i < s.replicas; i++) schedule(st, true);
+  return st;
 }
 
-// ── Run experiment ──────────────────────────────
-async function runExperiment() {
-  const ns     = document.getElementById('ns').value.trim();
-  const sel    = document.getElementById('sel').value.trim();
-  const dur    = document.getElementById('dur').value;
-  const blast  = document.getElementById('blast').value;
-  const cpuw   = document.getElementById('cpuw').value;
-  const dms    = document.getElementById('dms').value;
-  const dryRun = document.getElementById('dry-run').checked;
+function say(st, level, msg) {
+  st.events.push({ t: st.t, level, msg });
+  if (st.events.length > 400) st.events.shift();
+}
 
-  // Guard: namespace required
-  if (!ns)  { tlog('✗ Namespace is required.', 'err'); return; }
-  // Guard: selector required
-  if (!sel) { tlog('✗ Label selector is required (e.g. app=frontend).', 'err'); return; }
-  // Guard: kube-system blocked
-  if (ns === 'kube-system') {
-    tlog('✗ BLOCKED: kube-system is protected and cannot be targeted.', 'err'); return;
+function schedulableNodes(st) {
+  return st.nodes.filter(n => !n.cordoned);
+}
+
+function pickNode(st) {
+  const avail = schedulableNodes(st);
+  if (!avail.length) return null;
+  if (st.spec.spread) {
+    // Topology spread: prefer the zone currently holding the fewest pods.
+    const byZone = {};
+    avail.forEach(n => { byZone[n.zone] = byZone[n.zone] || []; byZone[n.zone].push(n); });
+    const counts = Object.keys(byZone).map(z => ({
+      z, n: st.pods.filter(p => p.phase !== 'Terminating' && nodeOf(st, p) && nodeOf(st, p).zone === z).length
+    }));
+    counts.sort((a, b) => a.n - b.n);
+    const pool = byZone[counts[0].z];
+    return pool[Math.floor(st.rand() * pool.length)];
   }
-  // Guard: token required
-  if (!CFG.TOKEN) {
-    tlog('✗ CONFIG.TOKEN not set. Open chaos.js and add your GitHub PAT.', 'err');
-    tlog('  → github.com/settings/tokens → Fine-grained → Actions:write', 'inf');
-    return;
+  // Otherwise least-loaded by pod count, the way the default scheduler leans.
+  const counts = avail.map(n => ({ n, c: st.pods.filter(p => p.node === n.name && p.phase !== 'Terminating').length }));
+  counts.sort((a, b) => a.c - b.c);
+  return counts[0].n;
+}
+
+function nodeOf(st, pod) {
+  return st.nodes.find(n => n.name === pod.node) || null;
+}
+
+function schedule(st, instant = false) {
+  const node = pickNode(st);
+  const pod = {
+    id: 'web-' + rid(),
+    node: node ? node.name : null,
+    phase: node ? 'ContainerCreating' : 'Pending',
+    reason: node ? '' : 'Unschedulable',
+    ready: false,
+    age: 0,
+    restarts: 0,
+    mem: 180,
+    backoff: 0,
+    oomCount: 0
+  };
+  if (instant) { pod.phase = 'Running'; pod.ready = true; pod.age = 60; }
+  st.pods.push(pod);
+  if (!node && !instant) say(st, 'warn', `${pod.id} is Pending — every node is cordoned`);
+  return pod;
+}
+
+function livePods(st) {
+  return st.pods.filter(p => p.phase !== 'Terminating' && p.phase !== 'Gone');
+}
+function readyPods(st) {
+  return st.pods.filter(p => p.ready && p.phase === 'Running');
+}
+
+/* PodDisruptionBudget check — the same question the eviction API asks. */
+function evictionAllowed(st) {
+  if (!st.spec.minAvailable) return true;
+  return readyPods(st).length - 1 >= st.spec.minAvailable;
+}
+
+function killPod(st, pod, opts = {}) {
+  if (opts.evict && !evictionAllowed(st)) {
+    say(st, 'ok', `eviction of ${pod.id} refused — PodDisruptionBudget floor of ${st.spec.minAvailable} would be broken`);
+    return false;
   }
+  pod.phase = 'Terminating';
+  pod.ready = false;
+  pod.terminatingFor = 0;
+  say(st, 'warn', `${pod.id} terminating${opts.reason ? ' — ' + opts.reason : ''}`);
+  return true;
+}
 
-  setStatus('running');
-  setBtnState(true);
+function restartPod(st, pod, reason) {
+  pod.restarts++;
+  pod.ready = false;
+  pod.mem = 180;
+  pod.age = 0;
+  if (pod.restarts >= 3) {
+    pod.phase = 'CrashLoopBackOff';
+    pod.backoff = Math.min(10 * Math.pow(2, pod.restarts - 3), 300);
+    say(st, 'err', `${pod.id} in CrashLoopBackOff after ${pod.restarts} restarts — backing off ${pod.backoff}s`);
+  } else {
+    pod.phase = 'ContainerCreating';
+    say(st, 'warn', `${pod.id} restarted (${reason}) — restart count ${pod.restarts}`);
+  }
+}
 
-  tlog('─'.repeat(48), 'dim');
-  tlog(`▶ ${selFaultName}  ns:${ns}  sel:${sel}  dur:${dur}s  blast:${blast}%  dry:${dryRun}`, 'inf');
-  tlog('Dispatching to GitHub Actions...', 'wrn');
+function nodeCpuUsed(st, node) {
+  const pods = st.pods.filter(p => p.node === node.name && p.phase === 'Running').length;
+  const stress = st.stressors
+    .filter(s => s.node === node.name && s.kind === 'cpu')
+    .reduce((a, s) => a + s.workers * 1000, 0);
+  return pods * st.spec.cpuRequest + stress;
+}
 
-  const inputs = { namespace: ns, selector: sel, duration: String(dur), blast_radius: String(blast), dry_run: String(dryRun) };
-  if (selWorkflow === 'cpu-stress.yml') inputs.cpu_workers = String(cpuw);
-  if (selWorkflow === 'net-delay.yml')  inputs.delay_ms    = String(dms);
+function injectFault(st, type, opts) {
+  const f = FAULTS[type];
+  st.fault = {
+    type,
+    magnitude: opts.magnitude || (f.mag ? f.mag.def : 0),
+    blast: opts.blast || 30,
+    endsAt: st.t + (opts.duration || 60),
+    duration: opts.duration || 60
+  };
+  const live = livePods(st).filter(p => p.phase === 'Running');
+  const count = f.blast ? Math.max(1, Math.floor(live.length * st.fault.blast / 100)) : live.length;
+  const shuffled = live.slice().sort(() => st.rand() - 0.5);
+  const targets = shuffled.slice(0, count);
+  st.fault.targetIds = targets.map(p => p.id);
 
-  try {
-    const res = await fetch(
-      `https://api.github.com/repos/${CFG.REPO}/actions/workflows/${selWorkflow}/dispatches`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${CFG.TOKEN}`,
-          'Accept': 'application/vnd.github+json',
-          'Content-Type': 'application/json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        body: JSON.stringify({ ref: 'main', inputs }),
-      }
-    );
+  say(st, 'info', `injecting ${f.label} — ${targets.length} of ${live.length} pods, ${st.fault.duration}s`);
 
-    if (res.status === 204) {
-      tlog('✓ Workflow dispatched!', 'ok');
-      tlog(`  Monitor → github.com/${CFG.REPO}/actions`, 'inf');
-      if (!dryRun) tlog('⚠ Live run active — monitor your cluster.', 'wrn');
-      addRun(selFaultName, ns, sel, dryRun);
-    } else {
-      const body = await res.json().catch(() => ({}));
-      tlog(`✗ Failed (HTTP ${res.status}): ${body.message || 'unknown'}`, 'err');
-      if (res.status === 401) tlog('  Token expired or missing Actions:write scope.', 'wrn');
-      if (res.status === 404) tlog('  Check CFG.REPO — repo or workflow not found.', 'wrn');
-      if (res.status === 422) tlog('  Workflow not on main branch yet.', 'wrn');
+  switch (type) {
+    case 'pod-kill':
+      targets.forEach(p => killPod(st, p, { evict: true, reason: 'chaos eviction' }));
+      break;
+
+    case 'container-kill':
+      targets.forEach(p => restartPod(st, p, 'container killed'));
+      break;
+
+    case 'cpu-stress': {
+      const nodes = [...new Set(targets.map(p => p.node))];
+      nodes.forEach(n => st.stressors.push({ kind: 'cpu', node: n, workers: st.fault.magnitude }));
+      say(st, 'warn', `CPU stress on ${nodes.join(', ')} — ${st.fault.magnitude} workers each`);
+      break;
     }
-  } catch (e) {
-    tlog(`✗ Network error: ${e.message}`, 'err');
-  } finally {
-    setStatus('ready');
-    setBtnState(false);
+
+    case 'memory-stress':
+      targets.forEach(p => { p.memPressure = st.fault.magnitude; });
+      say(st, 'warn', `allocating ${st.fault.magnitude}MiB in ${targets.length} pod(s)`);
+      break;
+
+    case 'disk-fill': {
+      const node = nodeOf(st, targets[0]) || st.nodes[0];
+      node.diskPct = Math.min(100, node.diskPct + Math.round(st.fault.magnitude / 40));
+      st.stressors.push({ kind: 'disk', node: node.name, mb: st.fault.magnitude });
+      say(st, 'warn', `${node.name} ephemeral storage at ${node.diskPct}%`);
+      break;
+    }
+
+    case 'net-delay': {
+      const nodes = [...new Set(targets.map(p => p.node))];
+      nodes.forEach(n => { nodeOf(st, { node: n }).delayMs = st.fault.magnitude; });
+      say(st, 'warn', `${st.fault.magnitude}ms latency on ${nodes.join(', ')}`);
+      break;
+    }
+
+    case 'net-loss': {
+      const nodes = [...new Set(targets.map(p => p.node))];
+      nodes.forEach(n => { nodeOf(st, { node: n }).lossPct = st.fault.magnitude; });
+      say(st, 'warn', `${st.fault.magnitude}% packet loss on ${nodes.join(', ')}`);
+      break;
+    }
+
+    case 'dns-blackhole':
+      targets.forEach(p => { p.dnsBlocked = true; });
+      say(st, 'warn', `cluster DNS unreachable for ${targets.length} pod(s)`);
+      break;
+
+    case 'node-drain': {
+      // Drain the node carrying the most of the workload — that is where a
+      // missing PodDisruptionBudget actually shows up.
+      const busiest = st.nodes
+        .map(n => ({ n, c: st.pods.filter(p => p.node === n.name && p.phase === 'Running').length }))
+        .sort((a, b) => b.c - a.c)[0];
+      const node = busiest ? busiest.n : st.nodes[0];
+      node.cordoned = true;
+      say(st, 'warn', `${node.name} cordoned`);
+      const onNode = st.pods.filter(p => p.node === node.name && p.phase === 'Running');
+      let blocked = 0;
+      onNode.forEach(p => { if (!killPod(st, p, { evict: true, reason: 'drained' })) blocked++; });
+      if (blocked) say(st, 'ok', `drain incomplete — ${blocked} pod(s) held by the PodDisruptionBudget`);
+      break;
+    }
+
+    case 'zone-outage': {
+      const zone = st.nodes[0].zone;
+      const zoneNodes = st.nodes.filter(n => n.zone === zone);
+      zoneNodes.forEach(n => { n.cordoned = true; });
+      say(st, 'err', `zone ${zone} lost — ${zoneNodes.map(n => n.name).join(', ')}`);
+      st.pods
+        .filter(p => zoneNodes.some(n => n.name === p.node) && p.phase !== 'Gone')
+        .forEach(p => { p.phase = 'Terminating'; p.ready = false; p.forceGone = true; });
+      break;
+    }
   }
+  return st;
 }
 
-// ── Emergency rollback ──────────────────────────
-async function emergencyRollback() {
-  if (!CFG.TOKEN) { tlog('✗ TOKEN not set — cannot trigger rollback.', 'err'); return; }
-  const ns = document.getElementById('ns').value.trim() || 'default';
-  if (!confirm(`Emergency rollback for namespace "${ns}"?\n\nThis will:\n• Delete all chaos pods + DaemonSets\n• Uncordon all nodes\n• Restart all deployments\n\nConfirm?`)) return;
+function clearFault(st) {
+  if (!st.fault) return;
+  say(st, 'info', `removing ${FAULTS[st.fault.type].label} and restoring the namespace`);
+  st.stressors = [];
+  st.nodes.forEach(n => {
+    n.delayMs = 0; n.lossPct = 0; n.diskPct = 20;
+    if (n.cordoned) { n.cordoned = false; say(st, 'ok', `${n.name} uncordoned`); }
+  });
+  st.pods.forEach(p => { p.dnsBlocked = false; p.memPressure = 0; });
+  st.fault = null;
+}
 
-  setStatus('rolling back');
-  tlog('─'.repeat(48), 'dim');
-  tlog(`⚠ Emergency rollback → ns:${ns}`, 'wrn');
+/* One simulated second. */
+function tick(st) {
+  st.t++;
+  const spec = st.spec;
 
-  try {
-    const res = await fetch(
-      `https://api.github.com/repos/${CFG.REPO}/actions/workflows/rollback.yml/dispatches`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${CFG.TOKEN}`,
-          'Accept': 'application/vnd.github+json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ref: 'main', inputs: { namespace: ns } }),
+  if (st.fault && st.t >= st.fault.endsAt) clearFault(st);
+
+  // Pod lifecycle
+  st.pods.forEach(p => {
+    p.age++;
+    if (p.phase === 'Terminating') {
+      p.terminatingFor = (p.terminatingFor || 0) + 1;
+      // A graceful delete waits for preStop hooks and in-flight requests.
+      // A lost node takes its pods with it immediately.
+      const wait = p.forceGone ? 0 : Math.max(1, Math.round(spec.gracePeriod / 3));
+      if (p.terminatingFor >= wait) p.phase = 'Gone';
+      return;
+    }
+    if (p.phase === 'CrashLoopBackOff') {
+      p.backoff--;
+      if (p.backoff <= 0) { p.phase = 'ContainerCreating'; p.age = 0; }
+      return;
+    }
+    if (p.phase === 'Pending') {
+      const n = pickNode(st);
+      if (n) { p.node = n.name; p.phase = 'ContainerCreating'; p.age = 0; p.reason = ''; }
+      return;
+    }
+    if (p.phase === 'ContainerCreating') {
+      if (p.age >= 4) { p.phase = 'Running'; p.age = 0; p.ready = !spec.readiness; }
+      return;
+    }
+    if (p.phase === 'Running') {
+      // Readiness gate: probes hold traffic back until the pod can serve it.
+      if (spec.readiness && !p.ready && p.age >= 5) {
+        p.ready = true;
+        say(st, 'ok', `${p.id} passed its readiness probe`);
+      } else if (!spec.readiness) {
+        p.ready = true;
       }
-    );
-    tlog(res.status === 204 ? '✓ Rollback dispatched.' : `✗ Failed (HTTP ${res.status})`,
-         res.status === 204 ? 'ok' : 'err');
-  } catch (e) {
-    tlog(`✗ ${e.message}`, 'err');
-  } finally {
-    setStatus('ready');
+
+      // Memory pressure leads to an OOM kill once the limit is crossed.
+      if (p.memPressure) {
+        p.mem += p.memPressure / 4;
+        const limit = spec.memLimit || 100000;
+        if (p.mem > limit) {
+          say(st, 'err', `${p.id} OOMKilled — used ${Math.round(p.mem)}MiB against a ${limit}MiB limit`);
+          p.mem = 180;
+          restartPod(st, p, 'OOMKilled');
+          return;
+        }
+      }
+
+      // Liveness probe fails when the node is saturated and no CPU limit
+      // protects the container from its neighbours.
+      const n = nodeOf(st, p);
+      if (spec.liveness && n && nodeCpuUsed(st, n) > n.cpuCap * 1.5 && !spec.cpuLimit) {
+        if (st.rand() < 0.08) { restartPod(st, p, 'liveness probe timed out'); return; }
+      }
+      // Kubelet eviction once ephemeral storage crosses the threshold.
+      if (n && n.diskPct >= 85 && st.rand() < 0.1) {
+        say(st, 'err', `${p.id} evicted — ${n.name} is out of ephemeral storage`);
+        p.phase = 'Terminating'; p.ready = false; p.forceGone = true;
+      }
+    }
+  });
+
+  st.pods = st.pods.filter(p => p.phase !== 'Gone');
+
+  // ReplicaSet reconciliation
+  const desired = spec.replicas;
+  const current = livePods(st).length;
+  if (current < desired) {
+    for (let i = 0; i < desired - current; i++) {
+      const p = schedule(st);
+      if (p.phase === 'Pending') say(st, 'err', `${p.id} cannot be scheduled — no node has room`);
+    }
   }
+
+  // HPA evaluates on a 15 second cadence
+  if (spec.hpa && st.t % 15 === 0) {
+    const used = st.nodes.reduce((a, n) => a + nodeCpuUsed(st, n), 0);
+    const cap = st.nodes.reduce((a, n) => a + n.cpuCap, 0);
+    const util = used / cap;
+    if (util > 0.7 && spec.replicas < spec.hpaMax) {
+      spec.replicas = Math.min(spec.hpaMax, spec.replicas + 2);
+      say(st, 'info', `HPA scaled to ${spec.replicas} replicas — cluster CPU at ${Math.round(util * 100)}%`);
+    }
+  }
+
+  // Traffic model. Without a readiness probe the Service also routes to pods
+  // that are still starting, and those requests fail.
+  const ready = readyPods(st);
+  const halfBaked = spec.readiness ? [] :
+    st.pods.filter(p => p.phase === 'ContainerCreating' || p.phase === 'CrashLoopBackOff');
+  let p95, errPct;
+  if (!ready.length) {
+    p95 = 5000;
+    errPct = 100;
+  } else {
+    const perPod = 100 / ready.length;
+    let lat = 0, err = 0;
+    ready.forEach(p => {
+      const n = nodeOf(st, p);
+      let l = 40 + perPod * 0.6;
+      if (n) {
+        l += n.delayMs;
+        const over = nodeCpuUsed(st, n) / n.cpuCap;
+        if (over > 1) l *= Math.min(6, 1 + (over - 1) * 2);
+        if (n.lossPct) { l += n.lossPct * 12; err += n.lossPct * 0.4; }
+      }
+      if (p.dnsBlocked) { l += 2000; err += 60; }
+      lat += l;
+    });
+    p95 = Math.round((lat / ready.length) * 1.35);
+    // A missing replica is not an error on its own: the endpoints controller
+    // takes it out of the Service and the survivors carry the load. It only
+    // turns into errors when nothing is holding traffic back — no readiness
+    // probe, or requests already in flight when the pod went away.
+    const missing = Math.max(0, st.spec.replicas - ready.length);
+    err += missing * (spec.readiness ? 0.4 : 3);
+    // Every request sent to a pod that cannot serve yet is a failed request.
+    if (halfBaked.length) {
+      const share = halfBaked.length / (ready.length + halfBaked.length);
+      err += share * 100 * ready.length;
+    }
+    errPct = Math.min(100, Math.round(err / ready.length));
+  }
+
+  st.samples.push({ t: st.t, p95, errPct, ready: ready.length });
+  if (st.samples.length > 600) st.samples.shift();
+  st.history.push({ t: st.t, p95, errPct, ready: ready.length });
+  if (st.history.length > 180) st.history.shift();
+
+  return { p95, errPct, ready: ready.length, total: livePods(st).length };
 }
 
-// ── Helpers ─────────────────────────────────────
-function tlog(msg, cls = '') {
-  const log  = document.getElementById('log');
-  const now  = new Date().toTimeString().slice(0,8);
+/* Hypothesis evaluation — the same fields the workflow accepts. */
+function evaluate(samples, slo) {
+  if (!samples.length) return { pass: true, detail: 'no samples' };
+  const lat = samples.map(s => s.p95).sort((a, b) => a - b);
+  const p95 = lat[Math.max(0, Math.floor(lat.length * 0.95) - 1)];
+  const errPct = Math.round(samples.reduce((a, s) => a + s.errPct, 0) / samples.length);
+  const minReady = Math.min(...samples.map(s => s.ready));
+  const breaches = [];
+  if (slo.p95_ms && p95 > slo.p95_ms) breaches.push(`latency ${p95}ms over ${slo.p95_ms}ms`);
+  if (slo.err_pct != null && errPct > slo.err_pct) breaches.push(`errors ${errPct}% over ${slo.err_pct}%`);
+  if (slo.min_ready && minReady < slo.min_ready) breaches.push(`ready pods fell to ${minReady}, floor is ${slo.min_ready}`);
+  return { pass: breaches.length === 0, p95, errPct, minReady, breaches, detail: `p95 ${p95}ms · errors ${errPct}% · ready floor ${minReady}` };
+}
+/* ChaosLab postmortem generator.
+   Turns a finished experiment into the incident report you would have written
+   if the failure had happened on its own — timeline, detection time, time to
+   recovery, contributing factors and action items with the diffs attached.
+   Pure logic, shared by the simulator and the workflow summary. */
+
+const PM_FIXES = {
+  pdb: {
+    action: 'Add a PodDisruptionBudget to the workload',
+    title: 'No PodDisruptionBudget on the workload',
+    detail: 'Evictions had nothing to hold them back, so the disruption took as many pods as it wanted.',
+    fix: `apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: <workload>
+spec:
+  minAvailable: <floor>
+  selector:
+    matchLabels:
+      app: <workload>`
+  },
+  replicas: {
+    action: 'Raise the replica count above the disruption budget floor',
+    title: 'Replica count leaves no headroom',
+    detail: 'With this few replicas there is no capacity to lose one and stay within the floor.',
+    fix: 'spec:\n  replicas: 3   # at least one more than the disruption budget floor'
+  },
+  spread: {
+    action: 'Spread replicas across zones with a topology spread constraint',
+    title: 'Replicas are not spread across failure domains',
+    detail: 'The scheduler was free to place every replica in one zone, so losing that zone lost all of them.',
+    fix: `topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app: <workload>`
+  },
+  memLimit: {
+    action: 'Set a memory limit on the container',
+    title: 'No memory limit on the container',
+    detail: 'Memory pressure was not contained to the workload, so the kubelet began evicting by QoS class across the node.',
+    fix: 'resources:\n  limits:\n    memory: 512Mi\n  requests:\n    memory: 256Mi'
+  },
+  cpuLimit: {
+    action: 'Set a CPU limit on the container',
+    title: 'No CPU limit on the container',
+    detail: 'One saturated container was able to take the node with it, and latency rose for everything scheduled alongside.',
+    fix: 'resources:\n  limits:\n    cpu: 500m\n  requests:\n    cpu: 100m'
+  },
+  hpa: {
+    action: 'Add a HorizontalPodAutoscaler',
+    title: 'No autoscaler to absorb the load',
+    detail: 'Capacity was fixed, so the surviving pods carried the whole load until the fault was removed.',
+    fix: `apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+spec:
+  minReplicas: 4
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target: { type: Utilization, averageUtilization: 70 }`
+  },
+  readiness: {
+    action: 'Add a readiness probe so traffic waits for the pod',
+    title: 'No readiness probe gating traffic',
+    detail: 'Requests reached pods before they could serve them, turning every restart into an error spike.',
+    fix: 'readinessProbe:\n  httpGet: { path: /readyz, port: 8080 }\n  initialDelaySeconds: 5\n  periodSeconds: 5'
+  },
+  liveness: {
+    action: 'Add a liveness probe so a hung container is restarted',
+    title: 'No liveness probe',
+    detail: 'A container that stopped responding would not have been restarted without someone noticing first.',
+    fix: 'livenessProbe:\n  httpGet: { path: /livez, port: 8080 }\n  initialDelaySeconds: 15\n  failureThreshold: 3'
+  },
+  timeout: {
+    action: 'Set a request timeout below the latency SLO',
+    title: 'Client timeouts are longer than the injected delay',
+    detail: 'Slow responses held connections open instead of failing fast, so latency propagated upstream rather than being shed.',
+    fix: '# set a request timeout below your SLO, and a circuit breaker above it\n# Envoy, Istio DestinationRule, or the client library equivalent'
+  },
+  dns: {
+    action: 'Tune DNS options and enable connection keep-alive',
+    title: 'No DNS resilience',
+    detail: 'Losing cluster DNS translated directly into request failures. Nothing cached, and connections were not reused across lookups.',
+    fix: `dnsConfig:
+  options:
+    - { name: ndots, value: "2" }
+    - { name: timeout, value: "2" }
+    - { name: attempts, value: "2" }
+# and keep-alive on the client so a working connection survives a DNS outage`
+  }
+};
+
+/* Which contributing factors apply, given the fault and the posture. */
+function contributingFactors(fault, spec) {
+  const out = [];
+  const add = k => { if (PM_FIXES[k] && !out.includes(k)) out.push(k); };
+
+  if (!spec.minAvailable && ['pod-kill', 'node-drain', 'zone-outage'].includes(fault)) add('pdb');
+  if (spec.replicas < 3) add('replicas');
+  if (!spec.spread && ['zone-outage', 'node-drain'].includes(fault)) add('spread');
+  if (!spec.memLimit && fault === 'memory-stress') add('memLimit');
+  if (!spec.cpuLimit && fault === 'cpu-stress') add('cpuLimit');
+  if (!spec.hpa && ['cpu-stress', 'zone-outage'].includes(fault)) add('hpa');
+  if (!spec.readiness) add('readiness');
+  if (!spec.liveness && ['container-kill', 'net-loss'].includes(fault)) add('liveness');
+  if (['net-delay', 'net-loss'].includes(fault)) add('timeout');
+  if (fault === 'dns-blackhole') add('dns');
+  return out;
+}
+
+/* Factors that come from how the run ended rather than from the posture. */
+const PM_RECOVERY = {
+  action: 'Find out why the workload did not return to its original ready count',
+  title: 'Recovery was not automatic',
+  detail: 'The fault was removed but the workload did not get back to full strength on its own. Check for pods stuck in CrashLoopBackOff, a scheduler with nowhere to place them, or a probe that never passes again after a restart.',
+  fix: 'kubectl get pods -n <namespace> -l <selector>\nkubectl describe pod <stuck-pod>\nkubectl get events -n <namespace> --sort-by=.lastTimestamp'
+};
+
+/* What to run next, so the report ends with an experiment rather than a wish. */
+function nextExperiment(r) {
+  if (r.verdict === 'pass') {
+    if (r.blastApplies && r.blast < 100) {
+      return `Repeat ${r.fault} at a blast radius of ${Math.min(100, r.blast * 2)}% to find the edge.`;
+    }
+    if (r.magnitude) {
+      return `Repeat ${r.fault} at a magnitude of ${r.magnitude * 2} to find the edge, then extend the duration past ${r.duration}s.`;
+    }
+    return `Combine ${r.fault} with a second fault, or extend the duration past ${r.duration}s, to see what breaks under sustained pressure.`;
+  }
+  const f = contributingFactors(r.fault, r.spec);
+  if (f.includes('pdb')) return `Add the PodDisruptionBudget, then run the identical ${r.fault} experiment again. The eviction should be refused rather than granted.`;
+  if (f.includes('spread')) return `Add the topology spread constraint and re-run zone-outage. The remaining zones should absorb it.`;
+  if (f.includes('hpa') || f.includes('cpuLimit')) return `Add the CPU limit and autoscaler, then re-run ${r.fault} at the same magnitude and compare the p95 curve.`;
+  if (f.includes('memLimit')) return `Set the memory limit and re-run memory-stress. The kill should be contained to one container.`;
+  return `Fix the top action item, then re-run ${r.fault} unchanged so the before and after are comparable.`;
+}
+
+function fmtTime(s) {
+  if (s == null) return 'not reached';
+  if (s < 60) return s + 's';
+  return Math.floor(s / 60) + 'm ' + (s % 60) + 's';
+}
+
+/* r: {
+     fault, faultLabel, mode, namespace, selector, duration, blast, magnitude,
+     spec, slo, baseline, chaos, verdict, firstBreachT, recoveryT,
+     peak: {p95, errPct, minReady}, timeline: [{t, level, msg}], startedAt
+   } */
+function buildPostmortem(r) {
+  const L = [];
+  const verdictWord = { pass: 'held', fail: 'broke', abort: 'broke, and the run was stopped early' }[r.verdict] || r.verdict;
+  const date = (r.startedAt || new Date()).toISOString().slice(0, 16).replace('T', ' ');
+
+  L.push(`# Incident report: ${r.faultLabel} on ${r.namespace || 'the simulated cluster'}`);
+  L.push('');
+  L.push(`**Date** ${date} UTC  `);
+  L.push(`**Experiment** \`${r.fault}\` · ${r.duration}s · blast radius ${r.blast}%${r.magnitude ? ' · magnitude ' + r.magnitude : ''}  `);
+  L.push(`**Target** ${r.selector ? '`' + r.selector + '`' : 'app=web'}, ${r.spec.replicas} replicas  `);
+  L.push(`**Source** ${r.mode === 'live' ? 'live cluster, dispatched through GitHub Actions' : 'ChaosLab simulator'}  `);
+  L.push(`**Outcome** the hypothesis ${verdictWord}`);
+  L.push('');
+
+  // ── Summary ──
+  L.push('## What happened');
+  L.push('');
+  const breached = !!(r.chaos.breaches && r.chaos.breaches.length);
+  if (r.verdict === 'pass') {
+    L.push(`A ${r.faultLabel} fault was injected against ${r.spec.replicas} replicas for ${r.duration} seconds. The workload stayed inside its stated steady state throughout and returned to full strength afterwards. p95 latency moved from ${r.baseline.p95}ms to ${r.chaos.p95}ms and the ready pod count never fell below ${r.chaos.minReady}.`);
+  } else if (!breached) {
+    // The stated bounds held, but the workload did not come back on its own.
+    // That is still a failed experiment, and a different one to write up.
+    L.push(`A ${r.faultLabel} fault was injected against ${r.spec.replicas} replicas for ${r.duration} seconds. Steady state was healthy beforehand at ${r.baseline.detail}, and the stated thresholds were never crossed while the fault was active.`);
+    L.push('');
+    L.push('The experiment failed on recovery rather than on impact: once the fault was removed the workload did not return to its original ready count within the recovery window. A fault that is survivable but not self-healing still needs a human, which makes it an availability risk even though every threshold held.');
+  } else {
+    L.push(`A ${r.faultLabel} fault was injected against ${r.spec.replicas} replicas. Steady state was measured first and was healthy at ${r.baseline.detail}. Within ${fmtTime(r.firstBreachT)} of injection the workload was outside its stated bounds: ${r.chaos.breaches.join('; ')}.`);
+    L.push('');
+    L.push(r.verdict === 'abort'
+      ? 'The abort condition fired, the fault was removed and the namespace was rolled back rather than riding out the full duration.'
+      : 'The experiment ran to completion.');
+    L[L.length - 1] += r.recoveryT != null
+      ? ` The workload was back to full strength ${fmtTime(r.recoveryT)} after it first fell below.`
+      : ' The workload had not returned to full strength when the run ended.';
+  }
+  L.push('');
+
+  // ── Impact ──
+  L.push('## Impact');
+  L.push('');
+  L.push('| | Before | During fault | Threshold |');
+  L.push('|---|---|---|---|');
+  L.push(`| p95 latency | ${r.baseline.p95}ms | ${r.chaos.p95}ms | ${r.slo.p95_ms ? r.slo.p95_ms + 'ms' : 'not set'} |`);
+  L.push(`| Error rate | ${r.baseline.errPct}% | ${r.chaos.errPct}% | ${r.slo.err_pct != null ? r.slo.err_pct + '%' : 'not set'} |`);
+  L.push(`| Ready pods | ${r.baseline.minReady} | ${r.chaos.minReady} | ${r.slo.min_ready ? 'at least ' + r.slo.min_ready : 'not set'} |`);
+  L.push('');
+  L.push(`- **Time to detection** ${r.firstBreachT != null ? fmtTime(r.firstBreachT) + ' after injection' : 'the hypothesis was never breached'}`);
+  L.push(`- **Time to recovery** ${r.recoveryT === 0 ? 'the workload never fell below full strength'
+    : r.recoveryT != null ? fmtTime(r.recoveryT) + ' from first dropping below full strength to being back at it'
+    : 'it had not recovered when the run ended'}`);
+  L.push(r.blastApplies
+    ? `- **Blast radius** ${r.blast}% of matching pods`
+    : `- **Scope** node level — this fault affects whole nodes, so the pod blast radius does not apply`);
+  L.push('');
+
+  // ── Timeline ──
+  if (r.timeline && r.timeline.length) {
+    L.push('## Timeline');
+    L.push('');
+    L.push('| Offset | Event |');
+    L.push('|---|---|');
+    const seen = new Set();
+    r.timeline
+      .filter(e => {
+        const k = e.t + '|' + e.msg;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      })
+      .slice(0, 30)
+      .forEach(e => L.push(`| t+${e.t}s | ${e.msg.replace(/\|/g, '\\|')} |`));
+    L.push('');
+  }
+
+  // ── Hypothesis ──
+  L.push('## Hypothesis');
+  L.push('');
+  L.push('```');
+  L.push([
+    r.slo.p95_ms ? `p95_ms=${r.slo.p95_ms}` : null,
+    r.slo.err_pct != null ? `err_pct=${r.slo.err_pct}` : null,
+    r.slo.min_ready ? `min_ready=${r.slo.min_ready}` : null
+  ].filter(Boolean).join(';'));
+  L.push('```');
+  L.push('');
+  L.push(r.verdict === 'pass'
+    ? 'The hypothesis held for the whole experiment.'
+    : `The hypothesis was broken on: ${r.chaos.breaches.join(', ')}.`);
+  L.push('');
+
+  // ── Contributing factors ──
+  const factors = contributingFactors(r.fault, r.spec);
+  if (r.recovered === false) { PM_FIXES.recovery = PM_RECOVERY; factors.unshift('recovery'); }
+  if (r.verdict !== 'pass' && factors.length) {
+    L.push('## Contributing factors');
+    L.push('');
+    factors.forEach((k, i) => {
+      L.push(`${i + 1}. **${PM_FIXES[k].title}.** ${PM_FIXES[k].detail}`);
+    });
+    L.push('');
+  }
+
+  // ── What went well ──
+  L.push('## What went well');
+  L.push('');
+  const good = [];
+  if (r.spec.readiness) good.push('The readiness probe kept traffic off pods that were not able to serve, so restarts did not become error spikes.');
+  if (r.spec.minAvailable) good.push(`The PodDisruptionBudget floor of ${r.spec.minAvailable} was enforced — at least one eviction was refused rather than granted.`);
+  if (r.spec.hpa) good.push('The autoscaler added capacity while the fault was active.');
+  if (r.spec.spread) good.push('Replicas were spread across zones, so no single failure domain held all of them.');
+  if (r.recoveryT != null) good.push(`Recovery was automatic and took ${fmtTime(r.recoveryT)} with no human involvement.`);
+  if (r.verdict === 'abort') good.push('The abort condition fired and cut the experiment short, which is the guardrail working as intended.');
+  if (!good.length) good.push('The experiment was contained: the fault was removed cleanly and the cluster returned to its prior state.');
+  good.forEach(g => L.push('- ' + g));
+  L.push('');
+
+  // ── Action items ──
+  if (r.verdict !== 'pass' && factors.length) {
+    L.push('## Action items');
+    L.push('');
+    factors.forEach(k => {
+      L.push(`- [ ] ${PM_FIXES[k].action}`);
+      L.push('');
+      L.push('  ```yaml');
+      PM_FIXES[k].fix.split('\n').forEach(l => L.push('  ' + l));
+      L.push('  ```');
+      L.push('');
+    });
+  }
+
+  // ── Next ──
+  L.push('## Next experiment');
+  L.push('');
+  L.push(nextExperiment(r));
+  L.push('');
+  L.push('---');
+  L.push('');
+  L.push('_Generated by [ChaosLab](https://chaoslab.eknathalabs.com)._');
+
+  return L.join('\n');
+}
+
+/* ══ UI ═══════════════════════════════════════════════════════════════ */
+let st = null, timer = null, mode = 'sim', selected = 'pod-kill';
+let phase = 'idle', baselineSamples = [], chaosSamples = [], injectedAt = 0;
+let timeline = [], firstBreachT = null, postmortemText = '';
+let degradedFromT = null, recoveredAtT = null, replicasAtInjection = 0;
+const $ = id => document.getElementById(id);
+
+/* ── log ── */
+function tlog(msg, cls) {
+  const log = $('log');
   const line = document.createElement('div');
   line.className = 'll';
-  line.innerHTML = `<span class="lt">${now}</span><span class="${cls}">${msg}</span>`;
-  log.appendChild(line);
+  const t = document.createElement('span');
+  t.className = 'lt';
+  t.textContent = st && st.running ? 't+' + String(st.t).padStart(3, '0') : new Date().toTimeString().slice(0, 8);
+  const m = document.createElement('span');
+  m.className = cls || 'dim';
+  m.textContent = msg;                       // textContent, never innerHTML
+  line.append(t, m);
+  log.append(line);
   log.scrollTop = log.scrollHeight;
-  document.getElementById('term-st').textContent = cls === 'ok' ? 'done' : cls || 'running';
+}
+function clearLog() { $('log').replaceChildren(); $('term-st').textContent = 'idle'; }
+function setStatus(s) { $('term-st').textContent = s; }
+
+/* ── mode ── */
+function setMode(m) {
+  mode = m;
+  document.body.dataset.mode = m;
+  $('m-sim').setAttribute('aria-pressed', String(m === 'sim'));
+  $('m-live').setAttribute('aria-pressed', String(m === 'live'));
+  $('run-btn').textContent = m === 'live' ? 'Dispatch to cluster' : 'Run experiment';
+  tlog(m === 'live'
+    ? 'Live mode. Faults are dispatched to GitHub Actions and executed against your cluster.'
+    : 'Simulator mode. Nothing leaves this browser.', 'info');
 }
 
-function clearLog() {
-  document.getElementById('log').innerHTML =
-    '<div class="ll"><span class="lt">--:--:--</span><span class="dim">Log cleared.</span></div>';
-  document.getElementById('term-st').textContent = 'idle';
+/* ── faults ── */
+function buildFaults() {
+  const wrap = $('faults');
+  Object.keys(FAULTS).forEach(id => {
+    const f = FAULTS[id];
+    const b = document.createElement('button');
+    b.className = 'fc';
+    b.type = 'button';
+    b.setAttribute('aria-pressed', String(id === selected));
+    b.dataset.id = id;
+    b.onclick = () => pickFault(id);
+    const ico = document.createElement('span'); ico.className = 'fc-ico'; ico.textContent = f.icon;
+    const nm = document.createElement('span'); nm.className = 'fc-nm'; nm.textContent = f.label;
+    const te = document.createElement('span'); te.className = 'fc-tests'; te.textContent = f.tests;
+    b.append(ico, nm, te);
+    wrap.append(b);
+  });
+  pickFault(selected);
 }
 
-function setStatus(txt) {
-  document.getElementById('nav-status').textContent = txt;
-  document.getElementById('term-st').textContent   = txt;
-}
+function pickFault(id) {
+  selected = id;
+  const f = FAULTS[id];
+  document.querySelectorAll('.fc').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.id === id)));
+  $('fault-detail').textContent = f.desc;
+  $('exp-sub').textContent = f.label;
 
-function setBtnState(dis) {
-  const b = document.getElementById('run-btn');
-  b.disabled = dis;
-  b.textContent = dis ? '⏳ Dispatching...' : '▶ Run Experiment';
-}
-
-function addRun(fault, ns, sel, dry) {
-  runHistory.unshift({ fault, ns, sel, dry, time: new Date().toLocaleTimeString() });
-  document.getElementById('runs').innerHTML =
-    runHistory.slice(0,10).map(r => `
-      <div class="run-row">
-        <div class="rdot ${r.dry ? 'rd-dry' : 'rd-ok'}"></div>
-        <span class="rfault">${r.fault}</span>
-        <span class="rns">ns:${r.ns}</span>
-        <span class="rsel">${r.sel}</span>
-        <span class="rtime">${r.time}</span>
-        <span class="rbadge ${r.dry ? 'rb-dry' : 'rb-live'}">${r.dry ? 'dry-run' : 'live'}</span>
-      </div>`).join('');
-}
-
-// ── Intersection observer (fade-in) ─────────────
-const obs = new IntersectionObserver(entries => {
-  entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); obs.unobserve(e.target); } });
-}, { threshold: 0.08 });
-document.querySelectorAll('.fade').forEach(el => obs.observe(el));
-
-// ── Init log ────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
-  syncDryLabel();
-  if (!CFG.TOKEN) {
-    tlog('⚠ CONFIG.TOKEN not set — open chaos.js to configure.', 'wrn');
+  const magF = $('mag-field');
+  if (f.mag) {
+    magF.style.display = '';
+    $('mag-label').textContent = f.mag.label + (f.mag.unit ? ' (' + f.mag.unit + ')' : '');
+    const i = $('mag'); i.min = f.mag.min; i.max = f.mag.max; i.value = f.mag.def;
   } else {
-    tlog('✓ Token configured — ready to dispatch experiments.', 'ok');
+    magF.style.display = 'none';
   }
+
+  const blast = $('blast');
+  blast.disabled = !f.blast;
+  $('blast-hint').textContent = f.blast
+    ? 'A random sample of matching pods, never more than this.'
+    : 'This fault targets nodes rather than individual pods, so the cap does not apply.';
+}
+
+/* ── cluster rendering ── */
+function renderCluster() {
+  const wrap = $('nodes');
+  wrap.replaceChildren();
+  st.nodes.forEach(n => {
+    const d = document.createElement('div');
+    d.className = 'node' + (n.cordoned ? ' cordoned' : '');
+    const hd = document.createElement('div');
+    hd.className = 'node-hd';
+    const nm = document.createElement('span'); nm.className = 'node-nm'; nm.textContent = n.name;
+    const z = document.createElement('span'); z.className = 'node-zone'; z.textContent = 'zone ' + n.zone;
+    hd.append(nm, z);
+    if (n.cordoned) hd.append(tag('cordoned', 't-cord'));
+    else if (n.delayMs) hd.append(tag(n.delayMs + 'ms delay', 't-net'));
+    else if (n.lossPct) hd.append(tag(n.lossPct + '% loss', 't-net'));
+    else if (st.stressors.some(s => s.node === n.name)) hd.append(tag('under stress', 't-cpu'));
+    d.append(hd);
+
+    const pods = document.createElement('div');
+    pods.className = 'pods';
+    const mine = st.pods.filter(p => p.node === n.name);
+    if (!mine.length) {
+      const e = document.createElement('span'); e.className = 'pod-empty'; e.textContent = 'no pods';
+      pods.append(e);
+    }
+    mine.forEach(p => {
+      const el = document.createElement('span');
+      el.className = 'pod ' + podClass(p);
+      el.textContent = p.id.replace('web-', '');
+      el.title = p.phase + (p.restarts ? ' · ' + p.restarts + ' restarts' : '');
+      pods.append(el);
+    });
+    d.append(pods);
+    wrap.append(d);
+  });
+  const unsched = st.pods.filter(p => !p.node);
+  $('cluster-hint').textContent = unsched.length
+    ? unsched.length + ' pod(s) cannot be scheduled'
+    : 'three worker nodes, one zone each';
+}
+function tag(text, cls) { const s = document.createElement('span'); s.className = 'node-tag ' + cls; s.textContent = text; return s; }
+function podClass(p) {
+  if (p.phase === 'Terminating') return 'term';
+  if (p.phase === 'CrashLoopBackOff') return 'crash';
+  if (p.phase === 'Pending') return 'pending';
+  if (p.phase === 'ContainerCreating') return 'starting';
+  return p.ready ? 'ready' : 'starting';
+}
+
+function renderMetrics(m) {
+  $('clock').textContent = st.t;
+  set('m-ready', m.ready, 'ready', m.ready >= (+$('slo-ready').value || 1) ? 'good' : 'bad');
+  set('m-p95', m.p95 + 'ms', 'p95', m.p95 > (+$('slo-p95').value || 500) ? 'bad' : m.p95 > (+$('slo-p95').value || 500) * 0.7 ? 'warn' : 'good');
+  set('m-err', m.errPct + '%', 'errors', m.errPct > (+$('slo-err').value || 5) ? 'bad' : m.errPct > 0 ? 'warn' : 'good');
+}
+function set(id, val, label, cls) {
+  const el = $(id);
+  el.className = 'metric ' + cls;
+  el.replaceChildren(Object.assign(document.createElement('b'), { textContent: String(val) }),
+    document.createTextNode(' ' + label));
+}
+
+function renderSpark() {
+  const svg = $('spark'), h = 64, w = 600;
+  const data = st.history;
+  if (data.length < 2) { svg.replaceChildren(); return; }
+  const n = data.length;
+  const x = i => (i / (n - 1)) * w;
+  const maxLat = Math.max(600, ...data.map(d => d.p95));
+  const maxReady = Math.max(4, ...data.map(d => d.ready));
+  const line = (fn, color, width) => {
+    const pts = data.map((d, i) => x(i).toFixed(1) + ',' + fn(d).toFixed(1)).join(' ');
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'polyline');
+    el.setAttribute('points', pts);
+    el.setAttribute('fill', 'none');
+    el.setAttribute('stroke', color);
+    el.setAttribute('stroke-width', width);
+    el.setAttribute('vector-effect', 'non-scaling-stroke');
+    return el;
+  };
+  svg.replaceChildren(
+    line(d => h - (d.p95 / maxLat) * h, 'var(--cyan)', 1.5),
+    line(d => h - (d.errPct / 100) * h, 'var(--red)', 1.5),
+    line(d => h - (d.ready / maxReady) * (h * 0.9) - 2, 'var(--green)', 1)
+  );
+}
+
+/* ── simulator run ── */
+function specFromUI() {
+  return {
+    replicas: +$('w-replicas').value || 1,
+    minAvailable: +$('w-pdb').value || 0,
+    cpuLimit: +$('w-cpu').value || 0,
+    memLimit: +$('w-mem').value || 0,
+    readiness: $('w-readiness').checked,
+    liveness: $('w-liveness').checked,
+    hpa: $('w-hpa').checked,
+    spread: $('w-spread').checked
+  };
+}
+function sloFromUI() {
+  return { p95_ms: +$('slo-p95').value || null, err_pct: +$('slo-err').value, min_ready: +$('slo-ready').value || null };
+}
+
+function resetAll() {
+  if (timer) { clearInterval(timer); timer = null; }
+  st = createCluster(specFromUI(), Math.floor(Math.random() * 99999));
+  phase = 'idle';
+  baselineSamples = []; chaosSamples = [];
+  $('verdict').classList.remove('show');
+  $('pm').classList.remove('show');
+  postmortemText = '';
+  $('run-btn').disabled = false;
+  $('run-btn').textContent = mode === 'live' ? 'Dispatch to cluster' : 'Run experiment';
+  renderCluster();
+  renderMetrics({ ready: st.pods.filter(p => p.ready).length, p95: 0, errPct: 0 });
+  $('spark').replaceChildren();
+  setStatus('idle');
+  tlog('Cluster reset. ' + st.spec.replicas + ' replicas across three nodes.', 'dim');
+}
+
+function runExperiment() {
+  if (mode === 'live') return dispatchLive();
+  st = createCluster(specFromUI(), Math.floor(Math.random() * 99999));
+  $('verdict').classList.remove('show');
+  st.running = true;
+  phase = 'baseline';
+  baselineSamples = []; chaosSamples = [];
+  timeline = []; firstBreachT = null; postmortemText = '';
+  degradedFromT = null; recoveredAtT = null;
+  $('pm').classList.remove('show');
+  const duration = Math.max(10, +$('dur').value || 60);
+  const slo = sloFromUI();
+  $('run-btn').disabled = true;
+  setStatus('measuring steady state');
+  tlog('Measuring steady state for 15s before touching anything.', 'info');
+
+  timer = setInterval(() => {
+    const m = tick(st);
+    renderCluster(); renderMetrics(m); renderSpark();
+    drainEvents(); trackRecovery();
+
+    if (phase === 'baseline') {
+      baselineSamples.push(st.samples[st.samples.length - 1]);
+      if (st.t >= 15) {
+        const b = evaluate(baselineSamples, slo);
+        if (!b.pass) {
+          tlog('Steady state is already broken before any fault: ' + b.breaches.join(', '), 'err');
+          tlog('There is no hypothesis to test here. Fix the baseline first, or relax the thresholds.', 'warn');
+          finish('abort', b, b, duration);
+          return;
+        }
+        tlog('Baseline holds: ' + b.detail, 'ok');
+        injectFault(st, selected, {
+          duration,
+          blast: +$('blast').value,
+          magnitude: +$('mag').value
+        });
+        injectedAt = st.t;
+        replicasAtInjection = st.spec.replicas;
+        phase = 'chaos';
+        setStatus('fault active');
+        drainEvents();
+      }
+    } else if (phase === 'chaos') {
+      chaosSamples.push(st.samples[st.samples.length - 1]);
+      const elapsed = st.t - injectedAt;
+      if (elapsed > 0 && elapsed % 10 === 0) {
+        // Judge the last twenty seconds, not the whole run so far. A breach
+        // that has already recovered should not abort a healthy experiment.
+        const v = evaluate(chaosSamples.slice(-20), slo);
+        if (!v.pass && firstBreachT === null) firstBreachT = elapsed;
+        if (!v.pass && $('abort').checked) {
+          tlog('Hypothesis broken at ' + elapsed + 's: ' + v.breaches.join(', '), 'err');
+          tlog('Aborting and rolling back.', 'warn');
+          clearFault(st);
+          phase = 'recover';
+          setStatus('rolling back');
+          finishSoon(evaluate(baselineSamples, slo), v, duration, 'abort');
+          return;
+        }
+      }
+      if (elapsed >= duration) {
+        phase = 'recover';
+        setStatus('recovering');
+        const v = evaluate(chaosSamples, slo);
+        if (!v.pass && firstBreachT === null) firstBreachT = elapsed;
+        finishSoon(evaluate(baselineSamples, slo), v, duration, v.pass ? 'pass' : 'fail');
+      }
+    }
+  }, 125);
+}
+
+let finishArgs = null, recoverUntil = 0, faultEndedAfter = 0;
+function finishSoon(base, chaos, duration, kind) {
+  finishArgs = { base, chaos, duration, kind };
+  faultEndedAfter = st.t - injectedAt;
+  recoverUntil = st.t + 60;
+  const t2 = setInterval(() => {
+    const m = tick(st);
+    renderCluster(); renderMetrics(m); renderSpark(); drainEvents(); trackRecovery();
+    const settled = recoveredAtT !== null || st.pods.filter(p => p.ready).length >= replicasAtInjection;
+    if (settled || st.t >= recoverUntil) {
+      clearInterval(t2);
+      if (timer) { clearInterval(timer); timer = null; }
+      const recovered = st.pods.filter(p => p.ready && p.phase === 'Running').length >= replicasAtInjection;
+      const recoveryT = (degradedFromT !== null && recoveredAtT !== null)
+        ? recoveredAtT - degradedFromT
+        : (degradedFromT === null ? 0 : null);
+      // A workload that came back and then fell over again has not recovered.
+      finish(recovered ? finishArgs.kind : 'fail', finishArgs.base, finishArgs.chaos,
+             finishArgs.duration, recovered ? recoveryT : null, recovered);
+    }
+  }, 125);
+  if (timer) { clearInterval(timer); timer = null; }
+}
+
+/* Time to recovery is measured from the moment the workload first fell below
+   full strength to the moment it got back there, which is what an on-call
+   engineer would have experienced. */
+function trackRecovery() {
+  if (phase === 'baseline' || !replicasAtInjection) return;
+  const readyNow = st.pods.filter(p => p.ready && p.phase === 'Running').length;
+  const at = st.t - injectedAt;
+  if (degradedFromT === null && readyNow < replicasAtInjection) degradedFromT = at;
+  else if (degradedFromT !== null && recoveredAtT === null && readyNow >= replicasAtInjection) recoveredAtT = at;
+}
+
+function drainEvents() {
+  while (st.events.length) {
+    const e = st.events.shift();
+    tlog(e.msg, e.level === 'err' ? 'err' : e.level === 'warn' ? 'warn' : e.level === 'ok' ? 'ok' : 'info');
+    // Kept for the incident report, offset from the moment of injection.
+    if (phase !== 'baseline') timeline.push({ t: Math.max(0, e.t - injectedAt), level: e.level, msg: e.msg });
+  }
+}
+
+function stopExperiment() {
+  if (mode === 'live') return rollbackLive();
+  if (!st || !timer) { tlog('Nothing is running.', 'dim'); return; }
+  clearInterval(timer); timer = null;
+  clearFault(st);
+  drainEvents();
+  tlog('Stopped by hand. Fault removed, nodes uncordoned.', 'warn');
+  st.running = false;
+  $('run-btn').disabled = false;
+  setStatus('idle');
+}
+
+function finish(kind, base, chaos, duration, recoverySecs, recovered) {
+  st.running = false;
+  $('run-btn').disabled = false;
+  setStatus('done');
+  const v = $('verdict'), badge = $('v-badge'), ttl = $('v-ttl'), bd = $('v-bd'), stats = $('v-stats');
+
+  const label = { pass: 'Held', fail: 'Broke', abort: 'Aborted' }[kind];
+  badge.className = 'v-badge ' + { pass: 'v-pass', fail: 'v-fail', abort: 'v-abort' }[kind];
+  badge.textContent = label;
+  ttl.textContent = FAULTS[selected].label + ' against ' + st.spec.replicas + ' replicas for ' + duration + 's';
+
+  bd.replaceChildren();
+  const p = document.createElement('p');
+  p.textContent = kind === 'pass'
+    ? 'The workload kept its steady state for the whole experiment and returned to full strength afterwards.'
+    : kind === 'abort'
+      ? 'The hypothesis broke while the fault was running, so the experiment was stopped early and the namespace rolled back.'
+      : (chaos.breaches && chaos.breaches.length)
+        ? 'The workload did not hold. What follows is the difference between what you expected and what happened.'
+        : 'Every threshold held while the fault was active, but the workload did not get back to its original ready count on its own. Survivable is not the same as self-healing.';
+  bd.append(p);
+
+  if (chaos.breaches && chaos.breaches.length) {
+    const ul = document.createElement('ul');
+    chaos.breaches.forEach(b => { const li = document.createElement('li'); li.textContent = b; ul.append(li); });
+    bd.append(ul);
+  }
+  const advice = adviseOn(kind, chaos);
+  if (advice) { const a = document.createElement('p'); a.style.marginTop = '10px'; a.textContent = advice; bd.append(a); }
+
+  stats.replaceChildren();
+  [['p95 baseline', base.p95 + 'ms'], ['p95 under fault', chaos.p95 + 'ms'],
+   ['Errors under fault', chaos.errPct + '%'], ['Ready pod floor', String(chaos.minReady)]]
+    .forEach(([l, val]) => {
+      const d = document.createElement('div'); d.className = 'v-stat';
+      const b = document.createElement('b'); b.textContent = val;
+      const s = document.createElement('span'); s.textContent = l;
+      d.append(b, s); stats.append(d);
+    });
+  v.classList.add('show');
+  tlog('Verdict: ' + label.toLowerCase() + ' — ' + chaos.detail, kind === 'pass' ? 'ok' : 'err');
+
+  postmortemText = buildPostmortem({
+    fault: selected,
+    faultLabel: FAULTS[selected].label,
+    mode: 'simulator',
+    namespace: '',
+    selector: '',
+    duration: duration,
+    blast: +$('blast').value,
+    blastApplies: !!FAULTS[selected].blast,
+    magnitude: FAULTS[selected].mag ? +$('mag').value : 0,
+    spec: st.spec,
+    slo: sloFromUI(),
+    baseline: base,
+    chaos: chaos,
+    verdict: kind,
+    firstBreachT: firstBreachT,
+    recoveryT: recoverySecs,
+    recovered: recovered,
+    timeline: timeline,
+    startedAt: new Date()
+  });
+  $('pm-text').textContent = postmortemText;
+  $('pm').classList.add('show');
+  tlog('Incident report ready below the verdict.', 'dim');
+}
+
+async function copyPostmortem() {
+  if (!postmortemText) return;
+  const btn = $('pm-copy');
+  try {
+    await navigator.clipboard.writeText(postmortemText);
+    btn.textContent = 'Copied';
+  } catch (e) {
+    // Clipboard is blocked outside a secure context; select the text instead.
+    const r = document.createRange();
+    r.selectNodeContents($('pm-text'));
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    btn.textContent = 'Selected — press copy';
+  }
+  setTimeout(() => { btn.textContent = 'Copy markdown'; }, 2200);
+}
+
+function downloadPostmortem() {
+  if (!postmortemText) return;
+  const blob = new Blob([postmortemText], { type: 'text/markdown' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'postmortem-' + selected + '-' + new Date().toISOString().slice(0, 10) + '.md';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+/* Turns a failed run into the specific change that would fix it. */
+function adviseOn(kind, chaos) {
+  if (kind === 'pass') return 'Try raising the blast radius, shortening the duration, or turning off a guardrail to find where it does break.';
+  const s = st.spec, f = selected;
+  if (!s.minAvailable && (f === 'pod-kill' || f === 'node-drain' || f === 'zone-outage'))
+    return 'Add a PodDisruptionBudget. With a floor set, the eviction that caused this would have been refused instead of granted.';
+  if (!s.spread && f === 'zone-outage')
+    return 'Turn on topology spread. Every replica is currently free to land in the same zone, so losing that zone loses all of them.';
+  if (!s.hpa && f === 'cpu-stress')
+    return 'Add an autoscaler, or set a CPU limit so one noisy container cannot take the whole node.';
+  if (!s.memLimit && f === 'memory-stress')
+    return 'Set a memory limit. Without one the pressure spreads past this workload and the kubelet starts evicting neighbours.';
+  if (s.replicas < 3)
+    return 'Raise the replica count. With ' + s.replicas + ' replicas there is no room to lose one.';
+  if (!s.readiness)
+    return 'Turn on the readiness probe. Traffic is reaching pods before they can serve it, which is where these errors come from.';
+  return 'Compare the baseline and the fault window above, then change one thing at a time and run it again.';
+}
+
+/* ══ Live mode ═══════════════════════════════════════════════════════ */
+function repo() { return $('repo').value.trim(); }
+function token() {
+  const t = $('token').value.trim();
+  if (t) sessionStorage.setItem('chaoslab.token', t);
+  return t || sessionStorage.getItem('chaoslab.token') || '';
+}
+
+async function dispatchLive() {
+  const tok = token(), r = repo();
+  const ns = $('ns').value.trim(), sel = $('sel').value.trim();
+  if (!tok) return tlog('Add a fine-grained token with Actions write access before dispatching.', 'err');
+  if (!/^[\w.-]+\/[\w.-]+$/.test(r)) return tlog('Repository must look like owner/name.', 'err');
+  if (!ns) return tlog('Namespace is required.', 'err');
+  if (!sel) return tlog('Label selector is required, for example app=frontend.', 'err');
+  if (['kube-system', 'kube-public', 'kube-node-lease'].includes(ns))
+    return tlog(ns + ' is protected and cannot be targeted.', 'err');
+
+  const slo = ['status=200',
+    'p95_ms=' + (+$('slo-p95').value || 500),
+    'err_pct=' + (+$('slo-err').value || 5),
+    'min_ready=' + (+$('slo-ready').value || 1)].join(';');
+
+  const inputs = {
+    fault: selected,
+    namespace: ns,
+    selector: sel,
+    duration: String(+$('dur').value || 60),
+    blast_radius: String(+$('blast').value || 30),
+    magnitude: String(+$('mag').value || 0),
+    dry_run: 'false',
+    probe_url: $('probe').value.trim(),
+    slo,
+    abort_on_breach: String($('abort').checked)
+  };
+
+  $('run-btn').disabled = true;
+  setStatus('dispatching');
+  tlog('Dispatching ' + FAULTS[selected].label + ' to ' + r + ' — ns ' + ns + ', selector ' + sel, 'info');
+
+  try {
+    const res = await fetch('https://api.github.com/repos/' + r + '/actions/workflows/chaos.yml/dispatches', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + tok,
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ ref: 'main', inputs })
+    });
+    if (res.status === 204) {
+      tlog('Accepted. Waiting for the run to appear.', 'ok');
+      followRun(r, tok);
+    } else {
+      const body = await res.json().catch(() => ({}));
+      tlog('Dispatch refused (HTTP ' + res.status + '): ' + (body.message || 'no detail'), 'err');
+      if (res.status === 401 || res.status === 403) tlog('The token is missing Actions: write on this repository, or it has expired.', 'warn');
+      if (res.status === 404) tlog('Repository or workflow not found. Check the name and that chaos.yml is on the main branch.', 'warn');
+      if (res.status === 422) tlog('The workflow file is not on main yet, or an input was rejected.', 'warn');
+      $('run-btn').disabled = false;
+      setStatus('idle');
+    }
+  } catch (e) {
+    tlog('Network error: ' + e.message, 'err');
+    $('run-btn').disabled = false;
+    setStatus('idle');
+  }
+}
+
+/* Streams the run's progress back into the log instead of sending you to GitHub. */
+async function followRun(r, tok, attempt) {
+  attempt = attempt || 0;
+  if (attempt > 120) { tlog('Stopped following this run. Check Actions for the outcome.', 'warn'); $('run-btn').disabled = false; return; }
+  await new Promise(res => setTimeout(res, 5000));
+  try {
+    const res = await fetch('https://api.github.com/repos/' + r + '/actions/runs?per_page=1&event=workflow_dispatch', {
+      headers: { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/vnd.github+json' }
+    });
+    const data = await res.json();
+    const run = data.workflow_runs && data.workflow_runs[0];
+    if (!run) return followRun(r, tok, attempt + 1);
+
+    if (run.status !== 'completed') {
+      setStatus(run.status.replace('_', ' '));
+      if (attempt % 4 === 0) tlog('Run ' + run.id + ' is ' + run.status.replace('_', ' ') + '.', 'dim');
+      return followRun(r, tok, attempt + 1);
+    }
+
+    const good = run.conclusion === 'success';
+    tlog('Run finished: ' + run.conclusion + '.', good ? 'ok' : 'err');
+    tlog(good
+      ? 'The hypothesis held. The step summary on the run has the before and after numbers.'
+      : 'The hypothesis was broken or the workload did not recover. The step summary explains which threshold went first.', good ? 'ok' : 'warn');
+    tlog(run.html_url, 'info');
+    tlog('The incident report for this run is on the summary page of that link.', 'dim');
+    setStatus('done');
+    $('run-btn').disabled = false;
+  } catch (e) {
+    tlog('Lost track of the run: ' + e.message, 'warn');
+    $('run-btn').disabled = false;
+  }
+}
+
+async function rollbackLive() {
+  const tok = token(), r = repo(), ns = $('ns').value.trim() || 'default';
+  if (!tok) return tlog('A token is needed to trigger a rollback.', 'err');
+  if (!confirm('Roll back namespace "' + ns + '"?\n\nThis removes every chaos workload, clears network emulation from all nodes, uncordons them and restarts the deployments.')) return;
+  setStatus('rolling back');
+  tlog('Triggering rollback for ' + ns, 'warn');
+  try {
+    const res = await fetch('https://api.github.com/repos/' + r + '/actions/workflows/rollback.yml/dispatches', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + tok, 'Accept': 'application/vnd.github+json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: 'main', inputs: { namespace: ns } })
+    });
+    tlog(res.status === 204 ? 'Rollback dispatched.' : 'Rollback refused (HTTP ' + res.status + ').', res.status === 204 ? 'ok' : 'err');
+  } catch (e) { tlog('Network error: ' + e.message, 'err'); }
+  setStatus('idle');
+}
+
+/* ── init ── */
+buildFaults();
+['w-replicas', 'w-pdb', 'w-cpu', 'w-mem', 'w-readiness', 'w-liveness', 'w-hpa', 'w-spread']
+  .forEach(id => $(id).addEventListener('change', () => { if (!timer) resetAll(); }));
+$('repo').addEventListener('change', () => {
+  $('actions-link').href = 'https://github.com/' + repo() + '/actions';
 });
+const saved = sessionStorage.getItem('chaoslab.token');
+if (saved) $('token').value = saved;
+resetAll();
+tlog('Pick a fault, set what should stay true, and run it. Nothing here touches a real cluster until you switch to live mode.', 'dim');
 </script>
 </body>
 </html>

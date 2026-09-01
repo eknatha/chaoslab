@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resilience linter — ChaosLab</title>
+<meta name="description" content="Paste a Kubernetes Deployment and find out which chaos experiments it would survive, before you run any of them.">
+<link rel="canonical" href="https://chaoslab.eknathalabs.com/linter.html">
+<meta name="theme-color" content="#080a0d">
+<meta property="og:title" content="Resilience linter — ChaosLab">
+<meta property="og:description" content="Which chaos experiments would your Deployment survive? Paste it and find out.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23080a0d'/%3E%3Cpath d='M9 22 L16 8 L23 22 M12 17 h8' stroke='%2300ff88' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+:root{
+  --bg:#080a0d;--bg2:#0d1018;--bg3:#131720;--bg4:#1a2030;
+  --border:rgba(255,255,255,.06);--border2:rgba(255,255,255,.12);
+  --text:#dde4ef;--text2:#a0aebb;--muted:#586070;
+  --green:#00ff88;--cyan:#00d4ff;--red:#ff4455;--amber:#ffb020;--purple:#9d5ff0;
+  --mono:ui-monospace,'JetBrains Mono','SF Mono',Menlo,Consolas,monospace;
+  --display:'Syne',ui-sans-serif,system-ui,-apple-system,sans-serif;--r:10px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px}
+body{font-family:var(--mono);background:var(--bg);color:var(--text);min-height:100vh}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,255,136,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,136,.022) 1px,transparent 1px);background-size:44px 44px}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--green);outline-offset:2px;border-radius:4px}
+button{font:inherit}
+
+nav{position:sticky;top:0;z-index:200;min-height:56px;padding:8px 1.25rem;display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;background:rgba(8,10,13,.93);backdrop-filter:blur(16px);border-bottom:1px solid var(--border)}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none}
+.brand-box{width:30px;height:30px;border-radius:6px;background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.3);display:flex;align-items:center;justify-content:center;font-family:var(--display);font-weight:800;font-size:11px;color:var(--green)}
+.brand-name{font-family:var(--display);font-weight:800;font-size:15px}
+.brand-name em{font-style:normal;color:var(--green)}
+.nav-right{display:flex;gap:.9rem;flex-wrap:wrap}
+.nav-right a{font-size:11px;color:var(--muted);text-decoration:none}
+.nav-right a:hover{color:var(--green)}
+
+main{position:relative;z-index:1;max-width:1120px;margin:0 auto;padding:0 1.25rem 5rem}
+.hero{padding:2.75rem 0 1.5rem;max-width:640px}
+.hero h1{font-family:var(--display);font-weight:800;font-size:clamp(2rem,5vw,3.1rem);letter-spacing:-.035em;line-height:1.03;margin-bottom:.9rem}
+.hero p{font-size:13px;color:var(--text2);line-height:1.85;max-width:56ch}
+
+.slabel{font-size:10px;color:var(--muted);letter-spacing:.16em;text-transform:uppercase;margin:2rem 0 12px;display:flex;align-items:center;gap:8px}
+.slabel::before{content:'';width:22px;height:1px;background:var(--green)}
+
+.editor{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+.editor-bar{padding:9px 14px;background:var(--bg3);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.editor-bar span{font-size:11px;color:var(--muted)}
+.samples{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+textarea{width:100%;min-height:280px;background:var(--bg2);border:none;color:var(--text);font-family:var(--mono);
+  font-size:12px;line-height:1.8;padding:14px 16px;resize:vertical;outline:none;tab-size:2}
+textarea::placeholder{color:var(--muted)}
+
+.btn{padding:8px 15px;border-radius:6px;font-family:var(--mono);font-size:11.5px;font-weight:700;cursor:pointer;border:1px solid transparent;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
+.btn-run{background:var(--green);color:#000}
+.btn-run:hover{background:#00e878}
+.btn-q{background:transparent;color:var(--muted);border-color:var(--border)}
+.btn-q:hover{border-color:var(--green);color:var(--green)}
+.runbar{display:flex;gap:10px;margin-top:1rem;flex-wrap:wrap}
+
+/* score */
+.result{display:none;margin-top:2rem}
+.result.show{display:block}
+.scorecard{display:grid;grid-template-columns:180px 1fr;gap:1px;background:var(--border);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
+@media(max-width:640px){.scorecard{grid-template-columns:1fr}}
+.score{background:var(--bg2);padding:1.5rem;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px}
+.score b{font-family:var(--display);font-weight:800;font-size:3.2rem;line-height:1}
+.score .g{font-size:11px;color:var(--muted)}
+.s-a b{color:var(--green)}.s-b b{color:var(--green)}.s-c b{color:var(--amber)}.s-d b{color:var(--amber)}.s-f b{color:var(--red)}
+.summary{background:var(--bg2);padding:1.35rem 1.5rem}
+.summary h2{font-family:var(--display);font-size:15px;font-weight:800;margin-bottom:8px}
+.summary p{font-size:12px;color:var(--text2);line-height:1.8;max-width:66ch}
+.posture{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.chip{font-size:10px;padding:3px 9px;border-radius:4px;border:1px solid var(--border2);color:var(--muted)}
+.chip.on{border-color:rgba(0,255,136,.3);color:var(--green);background:rgba(0,255,136,.06)}
+.chip.off{border-color:rgba(255,68,85,.25);color:var(--red);background:rgba(255,68,85,.05)}
+
+/* prediction table */
+.pred{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-top:1.25rem}
+table{width:100%;border-collapse:collapse;font-size:11.5px}
+th{text-align:left;padding:10px 14px;font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--border);background:var(--bg3)}
+td{padding:10px 14px;border-bottom:1px solid var(--border);vertical-align:top}
+tr:last-child td{border-bottom:none}
+.o{font-weight:700;font-size:10.5px;padding:2px 8px;border-radius:3px;white-space:nowrap}
+.o-outage{background:rgba(255,68,85,.12);color:var(--red)}
+.o-degraded{background:rgba(255,176,32,.12);color:var(--amber)}
+.o-wobble{background:rgba(157,95,240,.12);color:var(--purple)}
+.o-survives{background:rgba(0,255,136,.1);color:var(--green)}
+td .why{color:var(--muted);font-size:10.5px;line-height:1.6}
+td a{color:var(--green);font-size:10.5px;text-decoration:none}
+td a:hover{text-decoration:underline}
+
+/* findings */
+.finding{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin-bottom:10px;overflow:hidden}
+.f-hd{padding:12px 16px;display:flex;align-items:center;gap:11px;cursor:pointer;width:100%;background:none;border:none;color:inherit;text-align:left}
+.f-hd:hover{background:var(--bg3)}
+.sev{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:3px;flex-shrink:0}
+.sev-critical{background:rgba(255,68,85,.12);color:var(--red)}
+.sev-warn{background:rgba(255,176,32,.12);color:var(--amber)}
+.sev-info{background:rgba(88,96,112,.2);color:var(--muted)}
+.f-ttl{font-size:12.5px;flex:1}
+.f-caret{color:var(--muted);font-size:11px;flex-shrink:0}
+.f-bd{padding:0 16px 14px 16px;display:none}
+.f-bd.open{display:block}
+.f-bd p{font-size:11.5px;color:var(--text2);line-height:1.8;margin-bottom:9px;max-width:70ch}
+.f-bd .pl{color:var(--amber)}
+.f-bd pre{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:11px 13px;font-size:11px;line-height:1.7;overflow-x:auto;color:var(--text2)}
+.f-faults{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 10px}
+.f-faults span{font-size:9.5px;padding:2px 7px;border-radius:3px;background:var(--bg4);color:var(--muted)}
+
+.empty{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:1.4rem;font-size:12px;color:var(--text2);line-height:1.8}
+.err{border-color:rgba(255,68,85,.25);color:var(--red)}
+
+footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:1.5rem 1.25rem;max-width:1120px;margin:0 auto}
+.foot-inner{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:10px}
+.foot-brand{font-size:12px;color:var(--muted)}
+.foot-brand a{color:var(--muted);text-decoration:none}
+.foot-links{display:flex;gap:1rem;flex-wrap:wrap}
+.foot-links a{font-size:11px;color:var(--muted);text-decoration:none}
+.foot-links a:hover{color:var(--green)}
+.foot-copy{font-size:10px;color:var(--muted);opacity:.55}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<nav>
+  <a href="./" class="brand"><span class="brand-box" aria-hidden="true">CL</span><span class="brand-name">Chaos<em>Lab</em></span></a>
+  <div class="nav-right">
+    <a href="./">Simulator</a>
+    <a href="reports/">Reports</a>
+    <a href="https://github.com/eknatha/chaoslab" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://eknathalabs.com" target="_blank" rel="noopener">EknathaLabs</a>
+  </div>
+</nav>
+
+<main>
+  <header class="hero">
+    <h1>Which failures would this survive?</h1>
+    <p>Paste a Deployment — with its PodDisruptionBudget and autoscaler if it has them — and get the answer before you break anything. Every finding names the experiment that would expose it and the change that would fix it. Nothing is uploaded; the analysis runs in this page.</p>
+  </header>
+
+  <div class="slabel">Manifest</div>
+  <div class="editor">
+    <div class="editor-bar">
+      <span>YAML, one or many documents</span>
+      <div class="samples">
+        <button class="btn btn-q" onclick="loadSample('fragile')">Load a fragile example</button>
+        <button class="btn btn-q" onclick="loadSample('solid')">Load a hardened example</button>
+      </div>
+    </div>
+    <label for="yaml" class="sr-only" style="position:absolute;left:-9999px">Kubernetes manifest</label>
+    <textarea id="yaml" spellcheck="false" placeholder="apiVersion: apps/v1&#10;kind: Deployment&#10;metadata:&#10;  name: checkout&#10;spec:&#10;  replicas: 2&#10;  ..."></textarea>
+  </div>
+  <div class="runbar">
+    <button class="btn btn-run" onclick="runLint()">Analyse</button>
+    <button class="btn btn-q" onclick="document.getElementById('yaml').value='';document.getElementById('result').classList.remove('show')">Clear</button>
+  </div>
+
+  <div class="result" id="result" aria-live="polite"></div>
+</main>
+
+<footer>
+  <div class="foot-inner">
+    <div class="foot-brand">ChaosLab, part of <a href="https://eknathalabs.com">EknathaLabs</a></div>
+    <div class="foot-links">
+      <a href="./">Simulator</a>
+      <a href="reports/">Reports</a>
+      <a href="https://github.com/eknatha/chaoslab" target="_blank" rel="noopener">Source</a>
+    </div>
+  </div>
+  <div class="foot-copy">MIT licensed. Built in public.</div>
+</footer>
+
+<script>
+/* ChaosLab resilience linter.
+   Reads Kubernetes manifests and reports what will break when each fault
+   hits. Includes a small YAML reader — enough for manifests, no library. */
+
+/* ── YAML ──────────────────────────────────────────────────────────────
+   Handles the subset that appears in Kubernetes manifests: nested maps,
+   sequences, quoted and bare scalars, inline flow collections, comments,
+   block scalars, and multi-document files. */
+function parseYAML(text) {
+  const docs = [];
+  String(text).split(/^---\s*$/m).forEach(chunk => {
+    const lines = [];
+    let blockIndent = null;
+    chunk.split('\n').forEach(raw => {
+      if (blockIndent !== null) {
+        const ind = raw.search(/\S/);
+        if (raw.trim() === '' || ind >= blockIndent) return;   // inside a block scalar
+        blockIndent = null;
+      }
+      const noComment = raw.replace(/\s+#.*$/, '');
+      if (!noComment.trim() || /^\s*#/.test(raw)) return;
+      if (/[|>][-+]?\s*$/.test(noComment)) {
+        blockIndent = noComment.search(/\S/) + 1;
+      }
+      lines.push(noComment.replace(/\s+$/, ''));
+    });
+    if (lines.length) {
+      const doc = build(lines, 0, lines[0].search(/\S/)).value;
+      if (doc && typeof doc === 'object') docs.push(doc);
+    }
+  });
+  return docs;
+
+  function build(lines, i, indent) {
+    const isSeq = /^\s*- /.test(lines[i] || '');
+    const out = isSeq ? [] : {};
+    while (i < lines.length) {
+      const line = lines[i];
+      const ind = line.search(/\S/);
+      if (ind < indent) break;
+      if (ind > indent) { i++; continue; }
+      const body = line.slice(ind);
+
+      if (body.startsWith('- ')) {
+        const rest = body.slice(2);
+        if (/^[\w."'\-/]+\s*:/.test(rest)) {
+          // A sequence item that is itself a map; re-read it as one block.
+          const sub = [' '.repeat(ind + 2) + rest];
+          let j = i + 1;
+          while (j < lines.length && lines[j].search(/\S/) >= ind + 2) { sub.push(lines[j]); j++; }
+          out.push(build(sub, 0, ind + 2).value);
+          i = j;
+        } else {
+          out.push(scalar(rest));
+          i++;
+        }
+        continue;
+      }
+
+      const m = body.match(/^("[^"]*"|'[^']*'|[^:]+):\s*(.*)$/);
+      if (!m) { i++; continue; }
+      const key = scalar(m[1]);
+      const val = m[2];
+      if (val === '' || /^[|>][-+]?$/.test(val)) {
+        let j = i + 1;
+        while (j < lines.length && (lines[j].trim() === '' || lines[j].search(/\S/) > ind)) j++;
+        if (j > i + 1) {
+          const childIndent = lines[i + 1].search(/\S/);
+          out[key] = build(lines.slice(i + 1, j), 0, childIndent).value;
+        } else {
+          out[key] = /^[|>]/.test(val) ? '' : null;
+        }
+        i = j;
+      } else {
+        out[key] = scalar(val);
+        i++;
+      }
+    }
+    return { value: out, next: i };
+  }
+
+  function scalar(s) {
+    s = String(s).trim();
+    if (/^".*"$/.test(s) || /^'.*'$/.test(s)) return s.slice(1, -1);
+    if (s === 'true') return true;
+    if (s === 'false') return false;
+    if (s === 'null' || s === '~') return null;
+    if (/^-?\d+$/.test(s)) return parseInt(s, 10);
+    if (/^-?\d*\.\d+$/.test(s)) return parseFloat(s);
+    if (/^\{.*\}$/.test(s)) {
+      const o = {};
+      s.slice(1, -1).split(',').forEach(pair => {
+        const k = pair.split(':')[0], v = pair.slice(pair.indexOf(':') + 1);
+        if (k && k.trim()) o[scalar(k)] = scalar(v);
+      });
+      return o;
+    }
+    if (/^\[.*\]$/.test(s)) {
+      const inner = s.slice(1, -1).trim();
+      return inner ? inner.split(',').map(scalar) : [];
+    }
+    return s;
+  }
+}
+
+/* ── Rules ─────────────────────────────────────────────────────────────
+   Every rule names the fault that will expose it, so the report reads as
+   a prediction rather than a style guide. */
+const WORKLOAD_KINDS = ['Deployment', 'StatefulSet', 'DaemonSet', 'ReplicaSet', 'Rollout'];
+
+function lint(text) {
+  const docs = parseYAML(text);
+  if (!docs.length) return { error: 'No Kubernetes manifests found. Paste a Deployment, or a Deployment plus its PodDisruptionBudget and HorizontalPodAutoscaler.' };
+
+  const workloads = docs.filter(d => WORKLOAD_KINDS.includes(d.kind));
+  if (!workloads.length) return { error: 'No workload found. This linter reads Deployments, StatefulSets, DaemonSets and Argo Rollouts.' };
+
+  return workloads.map(w => auditWorkload(w, docs));
+}
+
+function auditWorkload(w, docs) {
+  const name = (w.metadata && w.metadata.name) || 'unnamed';
+  const kind = w.kind;
+  const spec = w.spec || {};
+  const tpl = (spec.template && spec.template.spec) || {};
+  const containers = Array.isArray(tpl.containers) ? tpl.containers : [];
+  const c0 = containers[0] || {};
+  const replicas = kind === 'DaemonSet' ? '-' : (spec.replicas != null ? spec.replicas : 1);
+  const labels = (spec.template && spec.template.metadata && spec.template.metadata.labels) || {};
+
+  const pdb = docs.find(d => d.kind === 'PodDisruptionBudget' && selectorMatches(d, labels));
+  const hpa = docs.find(d => d.kind === 'HorizontalPodAutoscaler' &&
+    d.spec && d.spec.scaleTargetRef && d.spec.scaleTargetRef.name === name);
+
+  const findings = [];
+  const add = (f) => findings.push(f);
+
+  const R = {
+    replicas: kind !== 'DaemonSet' && replicas >= 2,
+    replicasHigh: kind !== 'DaemonSet' && replicas >= 3,
+    pdb: !!pdb,
+    cpuReq: has(c0, 'resources.requests.cpu'),
+    memReq: has(c0, 'resources.requests.memory'),
+    cpuLim: has(c0, 'resources.limits.cpu'),
+    memLim: has(c0, 'resources.limits.memory'),
+    readiness: !!c0.readinessProbe,
+    liveness: !!c0.livenessProbe,
+    startup: !!c0.startupProbe,
+    distinctProbes: !!c0.readinessProbe && !!c0.livenessProbe &&
+      JSON.stringify(c0.readinessProbe) !== JSON.stringify(c0.livenessProbe),
+    spread: !!tpl.topologySpreadConstraints ||
+      !!(tpl.affinity && tpl.affinity.podAntiAffinity),
+    grace: tpl.terminationGracePeriodSeconds != null,
+    preStop: !!(c0.lifecycle && c0.lifecycle.preStop),
+    hpa: !!hpa,
+    pinnedImage: typeof c0.image === 'string' && !/:latest$/.test(c0.image) && c0.image.includes(':'),
+    rollingUpdate: kind !== 'DaemonSet' ? (spec.strategy ? spec.strategy.type !== 'Recreate' : true) : true,
+    hostNetwork: !tpl.hostNetwork,
+    priority: !!tpl.priorityClassName
+  };
+
+  if (!R.replicas) add({
+    sev: 'critical', id: 'replicas',
+    title: replicas === 1 ? 'Only one replica' : 'Replica count not set',
+    why: 'A single pod has no redundancy. Any pod kill, node drain or rolling update is a full outage for the length of a restart.',
+    faults: ['pod-kill', 'node-drain', 'zone-outage', 'container-kill'],
+    predict: 'Every disruptive fault takes the service to zero ready pods.',
+    fix: 'spec:\n  replicas: 3'
+  });
+
+  if (!R.pdb && kind !== 'DaemonSet' && R.replicas) add({
+    sev: 'critical', id: 'pdb',
+    title: 'No PodDisruptionBudget',
+    why: 'Voluntary disruptions — drains, node upgrades, cluster autoscaler scale-downs — have nothing to hold them back. All replicas can be evicted at once.',
+    faults: ['node-drain', 'pod-kill', 'zone-outage'],
+    predict: 'A node drain evicts every pod it hosts with no floor. Availability during a cluster upgrade is luck.',
+    fix: `apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ${name}
+spec:
+  minAvailable: ${Math.max(1, Math.floor((replicas || 3) * 0.6))}
+  selector:
+    matchLabels:
+${Object.keys(labels).map(k => `      ${k}: ${labels[k]}`).join('\n') || '      app: ' + name}`
+  });
+
+  if (!R.memLim) add({
+    sev: 'critical', id: 'mem-limit',
+    title: 'No memory limit',
+    why: 'A leaking container grows until the node runs out of memory, and then the kubelet starts killing pods across the node, not just the guilty one.',
+    faults: ['memory-stress'],
+    predict: 'Memory pressure spreads past the workload and takes neighbours with it.',
+    fix: 'resources:\n  limits:\n    memory: 512Mi\n  requests:\n    memory: 256Mi'
+  });
+
+  if (!R.cpuReq || !R.memReq) add({
+    sev: 'critical', id: 'requests',
+    title: 'No resource requests',
+    why: 'Without requests the pod lands in BestEffort QoS. It is the first thing evicted under node pressure and the scheduler cannot reason about capacity.',
+    faults: ['cpu-stress', 'memory-stress', 'disk-fill', 'node-drain'],
+    predict: 'The pod is evicted first under any node pressure, and reschedules onto nodes that have no room for it.',
+    fix: 'resources:\n  requests:\n    cpu: 100m\n    memory: 128Mi'
+  });
+
+  if (!R.readiness) add({
+    sev: 'critical', id: 'readiness',
+    title: 'No readiness probe',
+    why: 'The Service sends traffic the moment the container starts, before the process can serve it. Every restart becomes a burst of errors.',
+    faults: ['pod-kill', 'container-kill', 'node-drain', 'memory-stress'],
+    predict: 'Recovery from any restart produces a visible error spike instead of a clean handover.',
+    fix: 'readinessProbe:\n  httpGet: { path: /healthz, port: 8080 }\n  initialDelaySeconds: 5\n  periodSeconds: 5'
+  });
+
+  if (!R.cpuLim) add({
+    sev: 'warn', id: 'cpu-limit',
+    title: 'No CPU limit',
+    why: 'Nothing stops one container consuming the node. This is deliberate in some latency-sensitive designs, so treat it as a decision to confirm rather than a defect.',
+    faults: ['cpu-stress'],
+    predict: 'A noisy neighbour on the same node degrades latency for everything, including the kubelet.',
+    fix: 'resources:\n  limits:\n    cpu: 500m'
+  });
+
+  if (!R.liveness) add({
+    sev: 'warn', id: 'liveness',
+    title: 'No liveness probe',
+    why: 'A deadlocked process stays Ready forever. Nothing will restart it.',
+    faults: ['container-kill', 'net-delay', 'net-loss', 'dns-blackhole'],
+    predict: 'A hung process is never recovered automatically. Recovery waits for a human.',
+    fix: 'livenessProbe:\n  httpGet: { path: /healthz, port: 8080 }\n  initialDelaySeconds: 15\n  periodSeconds: 10\n  failureThreshold: 3'
+  });
+
+  if (R.liveness && !R.distinctProbes) add({
+    sev: 'warn', id: 'same-probe',
+    title: 'Readiness and liveness use the same check',
+    why: 'A dependency outage then fails both at once: the pod is pulled from the Service and restarted, and restarting does not bring the dependency back. This turns a partial outage into a crash loop.',
+    faults: ['dns-blackhole', 'net-delay', 'net-loss'],
+    predict: 'Any downstream failure escalates into a cluster-wide restart storm.',
+    fix: '# readiness checks dependencies, liveness only checks the process\nlivenessProbe:\n  httpGet: { path: /livez, port: 8080 }\nreadinessProbe:\n  httpGet: { path: /readyz, port: 8080 }'
+  });
+
+  if (!R.spread && R.replicas) add({
+    sev: 'warn', id: 'spread',
+    title: 'No topology spread or anti-affinity',
+    why: 'The scheduler is free to place every replica on one node or in one zone. Redundancy on paper, none in practice.',
+    faults: ['zone-outage', 'node-drain'],
+    predict: 'Losing a single node or zone can take every replica at once.',
+    fix: `topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+${Object.keys(labels).map(k => `        ${k}: ${labels[k]}`).join('\n') || '        app: ' + name}`
+  });
+
+  if (!R.preStop) add({
+    sev: 'warn', id: 'prestop',
+    title: 'No preStop hook',
+    why: 'Endpoint removal and SIGTERM race each other. The proxy can still be sending requests to a pod that has begun shutting down.',
+    faults: ['pod-kill', 'node-drain'],
+    predict: 'Every planned pod removal drops in-flight requests.',
+    fix: 'lifecycle:\n  preStop:\n    exec:\n      command: ["sleep", "10"]'
+  });
+
+  if (!R.grace) add({
+    sev: 'info', id: 'grace',
+    title: 'Termination grace period left at the default',
+    why: 'The default 30 seconds may be shorter than the longest request the service handles.',
+    faults: ['pod-kill', 'node-drain'],
+    predict: 'Long-running requests are cut off mid-flight during a rollout.',
+    fix: 'terminationGracePeriodSeconds: 60'
+  });
+
+  if (!R.hpa && kind === 'Deployment') add({
+    sev: 'info', id: 'hpa',
+    title: 'No HorizontalPodAutoscaler',
+    why: 'Capacity is fixed. A load spike or the loss of a zone leaves the survivors carrying everything.',
+    faults: ['cpu-stress', 'zone-outage'],
+    predict: 'Load has nowhere to go. Latency climbs until something times out.',
+    fix: `apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ${name}
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: ${name} }
+  minReplicas: ${Math.max(2, replicas || 2)}
+  maxReplicas: ${Math.max(6, (replicas || 2) * 3)}
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }`
+  });
+
+  if (!R.pinnedImage) add({
+    sev: 'warn', id: 'image-tag',
+    title: c0.image && /:latest$/.test(c0.image) ? 'Image pinned to :latest' : 'Image tag not pinned',
+    why: 'Two pods of the same Deployment can run different code. A restart during an incident can change the version under you.',
+    faults: ['pod-kill', 'container-kill', 'node-drain'],
+    predict: 'Recovery is not reproducible. What comes back may not be what went down.',
+    fix: 'image: registry/app:1.4.2   # or a digest'
+  });
+
+  if (!R.rollingUpdate) add({
+    sev: 'warn', id: 'strategy',
+    title: 'Recreate deployment strategy',
+    why: 'Every rollout stops all pods before starting new ones. Guaranteed downtime on every deploy.',
+    faults: ['pod-kill'],
+    predict: 'Deploys are outages.',
+    fix: 'strategy:\n  type: RollingUpdate\n  rollingUpdate:\n    maxUnavailable: 0\n    maxSurge: 1'
+  });
+
+  if (!R.hostNetwork) add({
+    sev: 'warn', id: 'hostnetwork',
+    title: 'hostNetwork is enabled',
+    why: 'The pod shares the node network namespace, so it is exposed to node-level network faults and cannot be isolated by NetworkPolicy.',
+    faults: ['net-delay', 'net-loss', 'dns-blackhole'],
+    predict: 'Network faults hit this workload at full strength with no way to scope them.',
+    fix: 'hostNetwork: false'
+  });
+
+  if (!R.priority) add({
+    sev: 'info', id: 'priority',
+    title: 'No priorityClassName',
+    why: 'Under node pressure the kubelet evicts by QoS and priority. Without one, this workload is treated as no more important than anything else.',
+    faults: ['memory-stress', 'disk-fill'],
+    predict: 'Evicted before less important workloads during node pressure.',
+    fix: 'priorityClassName: high-priority'
+  });
+
+  const weights = { critical: 18, warn: 8, info: 3 };
+  const lost = findings.reduce((a, f) => a + weights[f.sev], 0);
+  const score = Math.max(0, 100 - lost);
+
+  // Per-fault prediction: what happens if you run each experiment today.
+  const faultIds = ['pod-kill', 'container-kill', 'cpu-stress', 'memory-stress',
+    'disk-fill', 'net-delay', 'net-loss', 'dns-blackhole', 'node-drain', 'zone-outage'];
+  const prediction = faultIds.map(id => {
+    const hits = findings.filter(f => f.faults.includes(id));
+    const crit = hits.filter(f => f.sev === 'critical').length;
+    return {
+      fault: id,
+      outcome: crit >= 2 ? 'outage' : crit === 1 ? 'degraded' : hits.length ? 'wobble' : 'survives',
+      reasons: hits.map(f => f.title)
+    };
+  });
+
+  return {
+    name, kind, replicas,
+    score,
+    grade: score >= 85 ? 'A' : score >= 70 ? 'B' : score >= 50 ? 'C' : score >= 30 ? 'D' : 'F',
+    passed: Object.keys(R).filter(k => R[k]).length,
+    checks: Object.keys(R).length,
+    findings: findings.sort((a, b) => ({ critical: 0, warn: 1, info: 2 }[a.sev] - { critical: 0, warn: 1, info: 2 }[b.sev])),
+    prediction,
+    posture: {
+      replicas, pdb: R.pdb ? (pdb.spec.minAvailable ?? `maxUnavailable ${pdb.spec.maxUnavailable}`) : null,
+      hpa: R.hpa ? `${hpa.spec.minReplicas}–${hpa.spec.maxReplicas}` : null,
+      readiness: R.readiness, liveness: R.liveness, spread: R.spread,
+      cpuLimit: R.cpuLim, memLimit: R.memLim
+    }
+  };
+}
+
+function has(obj, path) {
+  return path.split('.').reduce((o, k) => (o && o[k] != null ? o[k] : null), obj) != null;
+}
+
+function selectorMatches(pdbDoc, labels) {
+  const ml = pdbDoc.spec && pdbDoc.spec.selector && pdbDoc.spec.selector.matchLabels;
+  if (!ml) return false;
+  return Object.keys(ml).every(k => String(labels[k]) === String(ml[k]));
+}
+
+const FAULT_LABELS = {
+  'pod-kill':'Pod kill','container-kill':'Container kill','cpu-stress':'CPU stress',
+  'memory-stress':'Memory pressure','disk-fill':'Disk fill','net-delay':'Network delay',
+  'net-loss':'Packet loss','dns-blackhole':'DNS blackhole','node-drain':'Node drain','zone-outage':'Zone outage'
+};
+const OUTCOME_TEXT = {
+  outage:'Goes down', degraded:'Degrades', wobble:'Wobbles', survives:'Holds'
+};
+const $ = id => document.getElementById(id);
+
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+}
+
+function runLint() {
+  const out = $('result');
+  out.replaceChildren();
+  out.classList.add('show');
+  const res = lint($('yaml').value);
+
+  if (res.error) {
+    out.append(el('div', 'empty err', res.error));
+    return;
+  }
+  res.forEach(w => out.append(renderWorkload(w)));
+}
+
+function renderWorkload(w) {
+  const frag = document.createDocumentFragment();
+
+  frag.append(el('div', 'slabel', w.kind + ' · ' + w.name));
+
+  const card = el('div', 'scorecard');
+  const score = el('div', 'score s-' + w.grade.toLowerCase());
+  score.append(el('b', null, String(w.score)), el('span', 'g', 'grade ' + w.grade));
+  card.append(score);
+
+  const sum = el('div', 'summary');
+  const crit = w.findings.filter(f => f.sev === 'critical').length;
+  sum.append(el('h2', null,
+    crit ? crit + ' change' + (crit > 1 ? 's' : '') + ' would change the outcome'
+         : w.findings.length ? 'Solid, with some room left' : 'Nothing to fix here'));
+  sum.append(el('p', null,
+    crit ? 'The critical findings below are the ones that decide whether a fault is survivable. Fix those first, then re-run this and take it to the simulator.'
+         : w.findings.length ? 'No critical gaps. The remaining findings are refinements that show up in longer or nastier experiments.'
+         : 'This workload has redundancy, a disruption budget, resource bounds and working probes. Take it to the simulator and turn the blast radius up until something gives.'));
+
+  const p = el('div', 'posture');
+  const chip = (label, on) => { const c = el('span', 'chip ' + (on ? 'on' : 'off'), label); return c; };
+  p.append(chip(w.replicas + ' replicas', w.replicas >= 2 || w.kind === 'DaemonSet'));
+  p.append(chip(w.posture.pdb != null ? 'PDB ' + w.posture.pdb : 'no PDB', w.posture.pdb != null));
+  p.append(chip(w.posture.hpa ? 'HPA ' + w.posture.hpa : 'no HPA', !!w.posture.hpa));
+  p.append(chip(w.posture.readiness ? 'readiness probe' : 'no readiness probe', w.posture.readiness));
+  p.append(chip(w.posture.liveness ? 'liveness probe' : 'no liveness probe', w.posture.liveness));
+  p.append(chip(w.posture.cpuLimit ? 'CPU limit' : 'no CPU limit', w.posture.cpuLimit));
+  p.append(chip(w.posture.memLimit ? 'memory limit' : 'no memory limit', w.posture.memLimit));
+  p.append(chip(w.posture.spread ? 'spread across zones' : 'no spread constraint', w.posture.spread));
+  sum.append(p);
+  card.append(sum);
+  frag.append(card);
+
+  /* per-fault prediction */
+  frag.append(el('div', 'slabel', 'What each experiment would do'));
+  const pred = el('div', 'pred');
+  const t = el('table');
+  const thead = el('thead');
+  const hr = el('tr');
+  ['Experiment', 'Predicted', 'Because', ''].forEach(h => hr.append(el('th', null, h)));
+  thead.append(hr); t.append(thead);
+  const tb = el('tbody');
+  w.prediction.forEach(pr => {
+    const tr = el('tr');
+    tr.append(el('td', null, FAULT_LABELS[pr.fault]));
+    const td2 = el('td');
+    td2.append(el('span', 'o o-' + pr.outcome, OUTCOME_TEXT[pr.outcome]));
+    tr.append(td2);
+    tr.append(el('td', 'why', pr.reasons.length ? pr.reasons.join(' · ') : 'Nothing in this manifest works against it.'));
+    const td4 = el('td');
+    const a = el('a', null, 'Try it');
+    a.href = './#' + pr.fault;
+    a.title = 'Open the simulator';
+    td4.append(a);
+    tr.append(td4);
+    tb.append(tr);
+  });
+  t.append(tb); pred.append(t); frag.append(pred);
+
+  /* findings */
+  if (w.findings.length) {
+    frag.append(el('div', 'slabel', 'Findings'));
+    w.findings.forEach((f, i) => frag.append(renderFinding(f, w.name + '-' + i)));
+  }
+  return frag;
+}
+
+function renderFinding(f, id) {
+  const box = el('div', 'finding');
+  const hd = el('button', 'f-hd');
+  hd.type = 'button';
+  hd.setAttribute('aria-expanded', 'false');
+  hd.setAttribute('aria-controls', id);
+  hd.append(el('span', 'sev sev-' + f.sev, f.sev));
+  hd.append(el('span', 'f-ttl', f.title));
+  const caret = el('span', 'f-caret', '+');
+  hd.append(caret);
+
+  const bd = el('div', 'f-bd');
+  bd.id = id;
+  bd.append(el('p', null, f.why));
+  bd.append(el('p', 'pl', f.predict));
+  const fl = el('div', 'f-faults');
+  f.faults.forEach(x => fl.append(el('span', null, FAULT_LABELS[x] || x)));
+  bd.append(fl);
+  bd.append(el('pre', null, f.fix));
+
+  hd.onclick = () => {
+    const open = bd.classList.toggle('open');
+    hd.setAttribute('aria-expanded', String(open));
+    caret.textContent = open ? '\u2212' : '+';
+  };
+  box.append(hd, bd);
+  return box;
+}
+
+const SAMPLES = {
+  fragile: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: checkout
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      containers:
+        - name: app
+          image: registry.example.com/checkout:latest
+          ports:
+            - containerPort: 8080
+`,
+  solid: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: checkout
+spec:
+  replicas: 4
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app: checkout
+  template:
+    metadata:
+      labels:
+        app: checkout
+    spec:
+      terminationGracePeriodSeconds: 60
+      priorityClassName: high-priority
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: checkout
+      containers:
+        - name: app
+          image: registry.example.com/checkout:1.4.2
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "10"]
+          readinessProbe:
+            httpGet: { path: /readyz, port: 8080 }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /livez, port: 8080 }
+            initialDelaySeconds: 15
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: checkout
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      app: checkout
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: checkout
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: checkout }
+  minReplicas: 4
+  maxReplicas: 12
+  metrics:
+    - type: Resource
+      resource: { name: cpu, target: { type: Utilization, averageUtilization: 70 } }
+`
+};
+
+function loadSample(which) {
+  $('yaml').value = SAMPLES[which];
+  runLint();
+}
+
+loadSample('fragile');
+</script>
+</body>
+</html>

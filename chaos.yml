@@ -1,0 +1,343 @@
+name: chaos
+
+# The run name is the machine-readable record the reports page reads back
+# through the public Actions API — no token and no committed manifest needed.
+run-name: >-
+  ${{ inputs.fault }} · ${{ inputs.namespace }} · ${{ inputs.selector }} ·
+  ${{ inputs.dry_run == 'true' && 'dry' || 'live' }} · ${{ inputs.duration }}s ·
+  blast ${{ inputs.blast_radius }}%
+
+on:
+  workflow_dispatch:
+    inputs:
+      fault:
+        description: Fault to inject
+        type: choice
+        required: true
+        default: pod-kill
+        options:
+          - pod-kill
+          - container-kill
+          - cpu-stress
+          - memory-stress
+          - disk-fill
+          - net-delay
+          - net-loss
+          - dns-blackhole
+          - node-drain
+          - zone-outage
+      namespace:
+        description: Target namespace
+        required: true
+        default: default
+      selector:
+        description: Label selector, for example app=frontend
+        required: true
+      duration:
+        description: Seconds to hold the fault
+        required: true
+        default: "60"
+      blast_radius:
+        description: Maximum percent of matching pods to affect
+        required: true
+        default: "30"
+      magnitude:
+        description: Fault intensity — CPU workers, MiB, ms, or loss percent
+        required: false
+        default: "0"
+      dry_run:
+        description: Preview only
+        type: boolean
+        default: true
+      probe_url:
+        description: "Steady-state probe: https://host/path or svc:name:port/path"
+        required: false
+        default: ""
+      slo:
+        description: "Hypothesis, for example status=200;p95_ms=500;err_pct=5;min_ready=2"
+        required: false
+        default: ""
+      abort_on_breach:
+        description: Stop and roll back the moment the hypothesis is broken
+        type: boolean
+        default: true
+
+# Least privilege: the job reads the repository and nothing else.
+permissions:
+  contents: read
+  # Required to mint the OIDC token when AWS_ROLE_ARN is configured.
+  id-token: write
+
+# One experiment per namespace at a time. Overlapping chaos produces
+# results nobody can attribute to a cause.
+concurrency:
+  group: chaos-${{ inputs.namespace }}
+  cancel-in-progress: false
+
+jobs:
+  chaos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Live runs go through a protected environment. Add required reviewers
+    # under Settings → Environments → chaos-live to gate them on approval.
+    environment: ${{ inputs.dry_run == 'true' && 'chaos-dry' || 'chaos-live' }}
+
+    env:
+      FAULT: ${{ inputs.fault }}
+      NS: ${{ inputs.namespace }}
+      SEL: ${{ inputs.selector }}
+      DURATION: ${{ inputs.duration }}
+      BLAST: ${{ inputs.blast_radius }}
+      MAGNITUDE: ${{ inputs.magnitude }}
+      DRY: ${{ inputs.dry_run }}
+      PROBE_URL: ${{ inputs.probe_url }}
+      SLO: ${{ inputs.slo }}
+      ABORT_ON_BREACH: ${{ inputs.abort_on_breach }}
+      CHAOS_ALLOWED_NAMESPACES: ${{ vars.CHAOS_ALLOWED_NAMESPACES }}
+      SAMPLES_BASE: /tmp/baseline.txt
+      SAMPLES_CHAOS: /tmp/chaos.txt
+      CHAOS_TIMELINE: /tmp/chaos-timeline.txt
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-kubectl@v4
+        with:
+          version: latest
+
+      - name: Validate inputs
+        run: |
+          . scripts/lib.sh
+          guard_namespace "$NS" >/dev/null
+          guard_selector  "$SEL" >/dev/null
+          valid_int "$DURATION" 10 900 || die "Duration must be between 10 and 900 seconds."
+          valid_int "$BLAST" 1 100     || die "Blast radius must be between 1 and 100."
+          valid_int "$MAGNITUDE" 0 65535 || die "Magnitude is out of range."
+          echo "Inputs accepted: $FAULT → ns=$NS sel=$SEL blast=${BLAST}% dry=$DRY"
+
+      # Preferred path: short-lived credentials federated from GitHub, so no
+      # cluster credential is stored in a repository secret at all. Set up by
+      # terraform/, which pins the trust policy to this environment.
+      - name: Assume AWS role
+        if: vars.AWS_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: chaoslab-${{ github.run_id }}
+
+      - name: Connect to cluster
+        env:
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          EKS_CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME }}
+          KUBECONFIG_DATA: ${{ secrets.KUBECONFIG_DATA }}
+          CLUSTER_CONTEXT: ${{ secrets.CLUSTER_CONTEXT }}
+        run: |
+          if [ -n "$AWS_ROLE_ARN" ]; then
+            echo "Authenticating through GitHub OIDC as $AWS_ROLE_ARN"
+            aws eks update-kubeconfig --name "$EKS_CLUSTER_NAME" --region "$AWS_REGION"
+          elif [ -n "$KUBECONFIG_DATA" ]; then
+            echo "Authenticating with the stored kubeconfig"
+            mkdir -p ~/.kube
+            printf '%s' "$KUBECONFIG_DATA" | base64 -d > ~/.kube/config
+            chmod 600 ~/.kube/config
+            [ -n "$CLUSTER_CONTEXT" ] && kubectl config use-context "$CLUSTER_CONTEXT"
+          else
+            echo "::error::No cluster credentials. Set the AWS_ROLE_ARN variable, or the KUBECONFIG_DATA secret. Running terraform/ configures either one."
+            exit 1
+          fi
+          kubectl cluster-info
+          kubectl get nodes
+
+      - name: Preflight
+        run: |
+          . scripts/lib.sh
+          preflight_posture "$NS" "$SEL"
+          echo "TOTAL_BEFORE=$(total_pods "$NS" "$SEL")" >> "$GITHUB_ENV"
+          echo "READY_BEFORE=$(ready_pods "$NS" "$SEL")" >> "$GITHUB_ENV"
+
+      - name: Preview only
+        if: inputs.dry_run == 'true'
+        run: |
+          . scripts/lib.sh
+          echo "Dry run — nothing will be changed."
+          echo "Fault      : $FAULT"
+          echo "Namespace  : $NS"
+          echo "Selector   : $SEL"
+          echo "Duration   : ${DURATION}s"
+          echo "Magnitude  : $MAGNITUDE"
+          TOTAL=$(total_pods "$NS" "$SEL")
+          MAX=$(( TOTAL * BLAST / 100 )); [ "$MAX" -lt 1 ] && MAX=1
+          echo "Would affect up to $MAX of $TOTAL matching pods."
+          kubectl get pods -n "$NS" -l "$SEL"
+
+      # ── Hypothesis: measure steady state before touching anything ───────
+      - name: Measure steady state
+        if: inputs.dry_run == 'false' && inputs.probe_url != ''
+        run: |
+          . scripts/lib.sh
+          probe_start "$NS" "$PROBE_URL"
+          WINDOW=$(( DURATION / 4 )); [ "$WINDOW" -lt 15 ] && WINDOW=15
+          echo "Sampling steady state for ${WINDOW}s"
+          probe_sample "$WINDOW" "$SAMPLES_BASE"
+          probe_stop
+          RESULT="$(slo_evaluate "$SAMPLES_BASE" "$SLO" "$NS" "$SEL")" || {
+            echo "::error::The system already breaches its own SLO before any fault is injected."
+            echo "$RESULT"
+            echo "There is no valid hypothesis to test. Fix steady state first."
+            exit 1
+          }
+          echo "Baseline $RESULT"
+          echo "BASELINE=$RESULT" >> "$GITHUB_ENV"
+          note 0 ok "steady state measured: $RESULT"
+
+      # ── Inject ──────────────────────────────────────────────────────────
+      - name: Inject fault
+        id: inject
+        if: inputs.dry_run == 'false'
+        run: |
+          . scripts/lib.sh
+          echo "INJECTED=true" >> "$GITHUB_ENV"
+          note 0 warn "$FAULT injected against $SEL in $NS, blast ${BLAST}%"
+          bash scripts/chaos.sh inject "$FAULT" 2>&1 | tee /tmp/inject.log
+          while read -r line; do note 0 info "$line"; done < <(grep -E '^\[|evicted|refused|cordoned' /tmp/inject.log | head -6)
+
+      - name: Hold and watch the hypothesis
+        if: inputs.dry_run == 'false'
+        run: |
+          . scripts/lib.sh
+          if [ -n "$PROBE_URL" ]; then
+            probe_start "$NS" "$PROBE_URL"
+            ELAPSED=0
+            BREACHED=""
+            LAST=""
+            LOW_READY=""
+            while [ "$ELAPSED" -lt "$DURATION" ]; do
+              probe_sample 10 "$SAMPLES_CHAOS"
+              ELAPSED=$(( ELAPSED + 10 ))
+              RESULT="$(slo_evaluate "$SAMPLES_CHAOS" "$SLO" "$NS" "$SEL")" && OK=1 || OK=0
+              LAST="$RESULT"
+              # Track the lowest ready count seen, so the report can show what
+              # actually happened during the fault and not only what breached.
+              SEEN="$(printf '%s' "$RESULT" | sed -n 's/.*ready=\([0-9]*\).*/\1/p' | head -1)"
+              if [ -n "$SEEN" ] && { [ -z "$LOW_READY" ] || [ "$SEEN" -lt "$LOW_READY" ]; }; then
+                LOW_READY="$SEEN"
+              fi
+              if [ "$OK" -eq 0 ]; then
+                echo "::warning::Hypothesis broken at ${ELAPSED}s — $RESULT"
+                if [ -z "$BREACHED" ]; then
+                  note "$ELAPSED" err "hypothesis broken: $RESULT"
+                  echo "FIRST_BREACH_T=$ELAPSED" >> "$GITHUB_ENV"
+                fi
+                BREACHED="$RESULT"
+                if [ "$ABORT_ON_BREACH" = "true" ]; then
+                  echo "ABORTED=true" >> "$GITHUB_ENV"
+                  echo "::error::Aborting early and rolling back."
+                  note "$ELAPSED" warn "abort condition fired, removing the fault"
+                  break
+                fi
+              else
+                echo "  ${ELAPSED}s $RESULT"
+                note "$ELAPSED" ok "$RESULT"
+              fi
+            done
+            probe_stop
+            [ -n "$BREACHED" ] && echo "BREACH=$BREACHED" >> "$GITHUB_ENV"
+            [ -n "$LAST" ]     && echo "CHAOS_RESULT=$LAST" >> "$GITHUB_ENV"
+            [ -n "$LOW_READY" ] && echo "LOW_READY=$LOW_READY" >> "$GITHUB_ENV"
+          else
+            sleep "$DURATION"
+          fi
+          true
+
+      # ── Always clean up, whatever happened above ────────────────────────
+      - name: Remove fault
+        if: always() && inputs.dry_run == 'false' && env.INJECTED == 'true'
+        run: |
+          . scripts/lib.sh
+          note "$DURATION" info "fault removed and chaos workloads cleaned up"
+          bash scripts/chaos.sh cleanup "$FAULT"
+
+      - name: Full rollback after an abort
+        if: always() && env.ABORTED == 'true'
+        run: bash scripts/rollback.sh "$NS"
+
+      # ── Verdict ─────────────────────────────────────────────────────────
+      - name: Verify recovery
+        if: always() && inputs.dry_run == 'false'
+        run: |
+          . scripts/lib.sh
+          echo "Waiting for the workload to converge"
+          START=$(date +%s)
+          DEADLINE=$(( START + 180 ))
+          while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+            READY="$(ready_pods "$NS" "$SEL")"
+            [ "$READY" -ge "${READY_BEFORE:-1}" ] && break
+            sleep 5
+          done
+          READY_AFTER="$(ready_pods "$NS" "$SEL")"
+          RECOVERY_T=$(( $(date +%s) - START ))
+          echo "READY_AFTER=$READY_AFTER" >> "$GITHUB_ENV"
+          echo "RECOVERY_T=$RECOVERY_T" >> "$GITHUB_ENV"
+          note $(( DURATION + RECOVERY_T )) ok "ready pods back to $READY_AFTER (was ${READY_BEFORE:-?})"
+          echo "Ready pods before: ${READY_BEFORE:-?}  after: $READY_AFTER"
+          kubectl get pods -n "$NS" -l "$SEL"
+
+          if [ "$READY_AFTER" -lt "${READY_BEFORE:-0}" ]; then
+            echo "RECOVERED=false" >> "$GITHUB_ENV"
+          else
+            echo "RECOVERED=true" >> "$GITHUB_ENV"
+          fi
+
+      - name: Write report
+        if: always()
+        run: |
+          mkdir -p reports
+          VERDICT=pass
+          [ "${ABORTED:-}" = "true" ]    && VERDICT=abort
+          [ -n "${BREACH:-}" ]           && VERDICT=fail
+          [ "${RECOVERED:-true}" = "false" ] && VERDICT=fail
+          [ "$DRY" = "true" ]            && VERDICT=dry-run
+          echo "VERDICT=$VERDICT" >> "$GITHUB_ENV"
+
+          cat > "reports/run-${{ github.run_id }}.json" <<JSON
+          {
+            "run_id": "${{ github.run_id }}",
+            "fault": "$FAULT",
+            "namespace": "$NS",
+            "selector": "$SEL",
+            "duration": "$DURATION",
+            "blast_radius": "$BLAST",
+            "magnitude": "$MAGNITUDE",
+            "dry_run": "$DRY",
+            "hypothesis": "$SLO",
+            "baseline": "${BASELINE:-}",
+            "breach": "${BREACH:-}",
+            "ready_before": "${READY_BEFORE:-}",
+            "ready_after": "${READY_AFTER:-}",
+            "recovered": "${RECOVERED:-}",
+            "verdict": "$VERDICT",
+            "actor": "${{ github.actor }}",
+            "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          JSON
+
+      - name: Write the incident report
+        if: always()
+        run: |
+          bash scripts/postmortem.sh > reports/postmortem-${{ github.run_id }}.md
+          cat "reports/postmortem-${{ github.run_id }}.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chaos-${{ inputs.fault }}-${{ github.run_id }}
+          path: reports/
+          retention-days: 30
+
+      - name: Fail the run when the hypothesis was broken
+        if: always() && env.VERDICT == 'fail'
+        run: exit 1
