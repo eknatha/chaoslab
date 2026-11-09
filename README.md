@@ -252,3 +252,13 @@ simulator and the linter keep working offline once loaded.
 ## License
 
 MIT
+
+## What's new
+
+- **42 faults** across nine categories: pods, capacity, network, control plane, delivery/GitOps, AI workloads, security, cloud and data, supply chain (Argo CD / Flux drift, Argo Rollouts / Flagger style canaries, bad rollouts). New faults are simulator-only until a live executor exists for them.
+- **Resilience score** (A to F) for the workload posture, an **error budget** per run, and an **alert check** that tells you whether your monitoring would have fired.
+- **Before/after compare**, replay scrubber, share links (`#f=...`), run history, a Game Day mode and a daily challenge.
+- **Exports**: Chaos Mesh, LitmusChaos, Istio, AWS FIS, Azure Chaos Studio, GitHub Action, Kyverno/Gatekeeper policies, PrometheusRule, Grafana dashboard, PromQL. These are generated templates: review identifiers and metric names before applying.
+- **Import** a Deployment/HPA/PDB/Rollout manifest or Helm values, or check a Terraform/OpenTofu plan for zone-outage risks.
+- **Reusable action**: `uses: eknatha/chaoslab@main` dispatches `chaos.yml` in your fork and fails the job when the hypothesis breaks.
+- Per-fault pages under `faults/` are generated with `node scripts/build-pages.mjs` (re-run after changing the engine).

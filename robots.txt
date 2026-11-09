@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://chaoslab.eknathalabs.com/sitemap.xml

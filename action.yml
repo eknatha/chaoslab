@@ -1,0 +1,49 @@
+name: ChaosLab resilience gate
+description: Dispatch a ChaosLab experiment against your cluster and fail the job if the hypothesis breaks.
+branding: { icon: activity, color: green }
+inputs:
+  fault: { description: Fault id, for example pod-kill, required: true }
+  namespace: { description: Target namespace, required: true }
+  selector: { description: Label selector, for example app=web, required: true }
+  duration: { description: Seconds to hold the fault, default: "60" }
+  blast_radius: { description: Percent of matching pods, default: "30" }
+  magnitude: { description: Fault intensity where it applies, default: "0" }
+  slo: { description: "Hypothesis, for example p95_ms=500;err_pct=5;min_ready=3", default: "status=200;p95_ms=500;err_pct=5;min_ready=1" }
+  repository: { description: Repository that holds chaos.yml (your ChaosLab fork), default: "" }
+  token: { description: Fine-grained token with Actions read and write on that repository, required: true }
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        IN_REPO: ${{ inputs.repository || github.repository }}
+        IN_TOKEN: ${{ inputs.token }}
+        IN_FAULT: ${{ inputs.fault }}
+        IN_NS: ${{ inputs.namespace }}
+        IN_SEL: ${{ inputs.selector }}
+        IN_DUR: ${{ inputs.duration }}
+        IN_BLAST: ${{ inputs.blast_radius }}
+        IN_MAG: ${{ inputs.magnitude }}
+        IN_SLO: ${{ inputs.slo }}
+      run: |
+        set -euo pipefail
+        case "$IN_NS" in kube-system|kube-public|kube-node-lease|cert-manager|istio-system|gatekeeper-system)
+          echo "::error::$IN_NS is a protected namespace"; exit 1;; esac
+        api="https://api.github.com/repos/$IN_REPO/actions"
+        hdr=(-H "Authorization: Bearer $IN_TOKEN" -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+        since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+        body=$(jq -n --arg f "$IN_FAULT" --arg n "$IN_NS" --arg s "$IN_SEL" --arg d "$IN_DUR" --arg b "$IN_BLAST" --arg m "$IN_MAG" --arg slo "$IN_SLO" \
+          '{ref:"main",inputs:{fault:$f,namespace:$n,selector:$s,duration:$d,blast_radius:$b,magnitude:$m,dry_run:"false",probe_url:"",slo:$slo,abort_on_breach:"true"}}')
+        code=$(curl -sS -o /dev/null -w '%{http_code}' -X POST "${hdr[@]}" "$api/workflows/chaos.yml/dispatches" -d "$body")
+        [ "$code" = 204 ] || { echo "::error::dispatch refused (HTTP $code)"; exit 1; }
+        echo "Dispatched $IN_FAULT to $IN_NS. Waiting for the run."
+        for i in $(seq 1 240); do
+          sleep 5
+          run=$(curl -sS "${hdr[@]}" "$api/runs?event=workflow_dispatch&created=>=$since&per_page=1" | jq -c '.workflow_runs[0] // empty')
+          [ -n "$run" ] || continue
+          [ "$(jq -r .status <<<"$run")" = completed ] || continue
+          concl=$(jq -r .conclusion <<<"$run"); echo "Run: $(jq -r .html_url <<<"$run") -> $concl"
+          [ "$concl" = success ] && exit 0
+          echo "::error::the hypothesis broke or the workload did not recover"; exit 1
+        done
+        echo "::error::timed out waiting for the run"; exit 1

@@ -77,7 +77,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:1.
   </a>
   <div class="nav-right">
     <a href="../index.html">← Simulator</a>
-    <a href="https://github.com/eknatha/chaoslab/actions" target="_blank" rel="noopener">Actions ↗</a>
     <a href="https://eknathalabs.com" target="_blank" rel="noopener">EknathaLabs ↗</a>
   </div>
 </nav>
@@ -116,7 +115,6 @@ footer{position:relative;z-index:1;border-top:1px solid var(--border);padding:1.
     </div>
     <div class="foot-links">
       <a href="../index.html">Simulator</a>
-      <a href="https://github.com/eknatha/chaoslab" target="_blank" rel="noopener">GitHub</a>
     </div>
   </div>
   <div class="foot-copy">© 2026 EknathaLabs · MIT License</div>
@@ -165,7 +163,7 @@ function renderReports(reports) {
         ${dry ? 'dry-run' : r.status || '—'}
       </td>
       <td style="color:var(--muted);font-size:11px">${ts}</td>
-      <td><a class="act-link" href="https://github.com/eknatha/chaoslab/actions/runs/${r.run_id}" target="_blank" rel="noopener">View ↗</a></td>
+      <td style="color:var(--muted);font-size:11px">#${r.run_id}</td>
     </tr>`;
   }).join('');
 
