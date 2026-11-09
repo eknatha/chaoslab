@@ -14,16 +14,16 @@ fs.mkdirSync('faults', { recursive: true });
 const urls = ['/', '/faults/', '/linter.html', '/reports/'];
 for (const [id, f] of Object.entries(FAULTS)) {
   const docs = (f.docs || []).filter(k => DOCS[k]).map(k => `<li><a href="${esc(DOCS[k][1])}" rel="noopener">${esc(DOCS[k][0])}</a></li>`).join('');
-  const body = `<p><a href="/faults/">All faults</a> / ${esc(CATS[f.cat])}</p><h1>${esc(f.label)}: chaos experiment for Kubernetes</h1><p>${esc(f.desc)}</p>
+  const body = `<p><a href="/faults/">All faults</a> / ${esc(CATS[f.cat])}</p><h1>${esc(f.label)}: chaos experiment</h1><p>${esc(f.desc)}</p>
 <div class="c"><b>What it tests</b><br>${esc(f.tests)}</div><div class="c"><b>The hypothesis holds when</b><br>${esc(f.holds)}</div><div class="c"><b>It breaks when</b><br>${esc(f.breaks)}</div>
 ${docs ? `<h2>Reference</h2><ul>${docs}</ul>` : ''}<p><a class="cta" href="/#f=${encodeURIComponent(id)}">Run this experiment in your browser</a></p>
 <p><small>${f.live ? 'Runs in the simulator and against a live cluster.' : 'Simulator only today. Export it as a manifest from the Export tab.'}</small></p>`;
   fs.mkdirSync(`faults/${id}`, { recursive: true });
-  fs.writeFileSync(`faults/${id}/index.html`, page(`${f.label} chaos experiment — ChaosLab`, `${f.label}: ${f.tests}. Run it against a simulated Kubernetes cluster in your browser.`, `/faults/${id}/`, body));
+  fs.writeFileSync(`faults/${id}/index.html`, page(`${f.label} chaos experiment — ChaosLab`, `${f.label}: ${f.tests}. Run it against a simulated system in your browser.`, `/faults/${id}/`, body));
   urls.push(`/faults/${id}/`);
 }
 const list = Object.entries(CATS).map(([c, n]) => `<h2>${esc(n)}</h2><ul>${Object.entries(FAULTS).filter(([, f]) => f.cat === c).map(([id, f]) => `<li><a href="/faults/${id}/">${esc(f.label)}</a> — ${esc(f.tests)}</li>`).join('')}</ul>`).join('');
-fs.writeFileSync('faults/index.html', page('Kubernetes chaos experiments — ChaosLab', `${Object.keys(FAULTS).length} faults for Kubernetes chaos engineering, from pod kills to GitOps drift.`, '/faults/', `<h1>Kubernetes fault catalogue</h1>${list}`));
+fs.writeFileSync('faults/index.html', page('Chaos experiment catalogue — ChaosLab', `${Object.keys(FAULTS).length} faults across compute, network, data, cloud, delivery and AI services, from pod kills to LLM outages.`, '/faults/', `<h1>Fault catalogue</h1>${list}`));
 fs.writeFileSync('sitemap.xml', `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(u => `  <url><loc>${SITE}${u}</loc></url>`).join('\n')}\n</urlset>\n`);
 fs.writeFileSync('robots.txt', `User-agent: *\nAllow: /\nSitemap: ${SITE}/sitemap.xml\n`);
 console.log('wrote', urls.length, 'pages');

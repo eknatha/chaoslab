@@ -2,13 +2,15 @@
 
 **[chaoslab.eknathalabs.com](https://chaoslab.eknathalabs.com)** · part of [EknathaLabs](https://eknathalabs.com)
 
-Break Kubernetes on purpose, and find out whether it held.
+Break production on purpose, and find out whether it held.
+
+ChaosLab covers six layers: compute and platform, network and edge, data and state, cloud and regions, delivery and security, and AI services. Kubernetes is one layer, and the only one with live mode today.
 
 ChaosLab has three parts:
 
 | | |
 |---|---|
-| **[Simulator](https://chaoslab.eknathalabs.com/)** | A Kubernetes cluster that runs in your browser. Ten fault types, real reconciliation semantics, no cluster and no credentials needed. |
+| **[Simulator](https://chaoslab.eknathalabs.com/)** | A system that runs in your browser: a Kubernetes cluster, its dependencies and the path between them. Ten fault types, real reconciliation semantics, no cluster and no credentials needed. |
 | **[Resilience linter](https://chaoslab.eknathalabs.com/linter.html)** | Paste a Deployment and find out which experiments it would survive, before running any of them. |
 | **Live mode** | The same experiment dispatched at your own cluster through GitHub Actions, with a hypothesis, abort conditions and guaranteed cleanup. |
 | **Incident reports** | Every run ends in a written postmortem: timeline, time to detection, time to recovery, contributing factors and action items with the diffs attached. |
@@ -255,7 +257,7 @@ MIT
 
 ## What's new
 
-- **42 faults** across nine categories: pods, capacity, network, control plane, delivery/GitOps, AI workloads, security, cloud and data, supply chain (Argo CD / Flux drift, Argo Rollouts / Flagger style canaries, bad rollouts). New faults are simulator-only until a live executor exists for them.
+- **42 faults** across six layers: compute and platform, network and edge, data and state, cloud and regions, delivery and security, and AI services. Delivery covers Argo CD / Flux drift, canaries and bad rollouts. New faults are simulator-only until a live executor exists for them.
 - **Resilience score** (A to F) for the workload posture, an **error budget** per run, and an **alert check** that tells you whether your monitoring would have fired.
 - **Before/after compare**, replay scrubber, share links (`#f=...`), run history, a Game Day mode and a daily challenge.
 - **Exports**: Chaos Mesh, LitmusChaos, Istio, AWS FIS, Azure Chaos Studio, GitHub Action, Kyverno/Gatekeeper policies, PrometheusRule, Grafana dashboard, PromQL. These are generated templates: review identifiers and metric names before applying.

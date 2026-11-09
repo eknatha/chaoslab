@@ -3,21 +3,21 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChaosLab — break Kubernetes on purpose</title>
-<meta name="description" content="Run chaos experiments against a simulated Kubernetes cluster in your browser, or dispatch real faults at your own cluster through GitHub Actions. 42 faults, a resilience score, error budgets and exports. Part of EknathaLabs.">
+<title>ChaosLab — break production on purpose</title>
+<meta name="description" content="Run chaos experiments in your browser across compute, network, data, cloud, delivery and AI services. Get a resilience score, error budgets and exports for Chaos Mesh, AWS FIS, Azure Chaos Studio and CI. Kubernetes live mode included. Part of EknathaLabs.">
 <link rel="canonical" href="https://chaoslab.eknathalabs.com/">
 <meta name="theme-color" content="#080a0d">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="ChaosLab">
 <meta property="og:url" content="https://chaoslab.eknathalabs.com/">
-<meta property="og:title" content="ChaosLab — break Kubernetes on purpose">
-<meta property="og:description" content="A Kubernetes cluster you can break in the browser, and a hypothesis engine that tells you whether it held.">
+<meta property="og:title" content="ChaosLab — break production on purpose">
+<meta property="og:description" content="Break compute, network, data, cloud, delivery and AI services in your browser, and find out whether your system held.">
 <meta property="og:image" content="https://chaoslab.eknathalabs.com/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="ChaosLab — break Kubernetes on purpose">
-<meta name="twitter:description" content="A Kubernetes cluster you can break in the browser, and a hypothesis engine that tells you whether it held.">
+<meta name="twitter:title" content="ChaosLab — break production on purpose">
+<meta name="twitter:description" content="Break compute, network, data, cloud, delivery and AI services in your browser, and find out whether your system held.">
 <meta name="twitter:image" content="https://chaoslab.eknathalabs.com/og.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23080a0d'/%3E%3Cpath d='M9 22 L16 8 L23 22 M12 17 h8' stroke='%2300ff88' stroke-width='2.4' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="manifest" href="manifest.webmanifest">
@@ -575,6 +575,25 @@ dialog.sheet::backdrop{background:rgba(0,0,0,.6)}
   .nodewrap canvas,.sweep{display:none}
 }
 
+/* service map and view toggle */
+.viewtog{display:inline-flex;gap:4px;margin:6px 0}
+.viewtog button{font:inherit;font-size:12px;padding:4px 12px;border-radius:999px;border:1px solid var(--line,#2a3038);background:transparent;color:inherit;cursor:pointer}
+.viewtog button[aria-pressed="true"]{background:rgba(0,255,136,.12);border-color:rgba(0,255,136,.5)}
+.svcmap svg{width:100%;height:auto;display:block}
+.svcmap-cap{font-size:12px;opacity:.7;padding:4px 2px}
+.map-node rect{fill:#10151b;stroke:#2f3a46;stroke-width:1.2}
+.map-node.warn rect{stroke:#ffb020;fill:rgba(255,176,32,.08)}
+.map-node.bad rect{stroke:#ff4455;fill:rgba(255,68,85,.14);stroke-width:1.8}
+.map-t{fill:#e8edf2;font:600 12px system-ui,sans-serif}
+.map-s{fill:#8e9aa7;font:10px system-ui,sans-serif}
+.map-link{stroke:#2f3a46;stroke-width:1.4;stroke-dasharray:4 4;animation:dash 1.2s linear infinite}
+.map-link.warn{stroke:#ffb020}
+.map-link.bad{stroke:#ff4455}
+.map-region{fill:rgba(255,68,85,.05);stroke:#ff4455;stroke-dasharray:6 4}
+.map-rlabel{fill:#ff6b78;font:10px system-ui,sans-serif}
+@keyframes dash{to{stroke-dashoffset:-16}}
+[hidden]{display:none!important}
+
 </style>
 </head>
 <body data-mode="sim" data-tab="setup">
@@ -613,15 +632,15 @@ dialog.sheet::backdrop{background:rgba(0,0,0,.6)}
 
   <header class="hero">
     <div class="hero-l">
-      <h1>Break Kubernetes on purpose</h1>
-      <p>Pick a fault, state what should stay true, and watch whether it holds. The cluster runs in your browser: no cluster, no credentials, nothing to install. When you want the real thing, switch to live mode and the same experiment goes to your own cluster through GitHub Actions.</p>
+      <h1>Break production on purpose</h1>
+      <p>Pick a fault, state what should stay true, and watch whether it holds. Everything runs in your browser: no cluster, no credentials, nothing to install. Faults span compute, network, data, cloud, delivery and AI services. For Kubernetes, live mode sends the same experiment to your own cluster through GitHub Actions.</p>
       <div class="cta">
         <button class="btn btn-run btn-big" type="button" id="hero-run">Run your first experiment</button>
         <a class="btn btn-q btn-big" href="#analysis" id="hero-score">See your resilience score</a>
       </div>
       <div class="hero-facts">
-        <div><b id="fact-faults">25</b>faults</div>
-        <div><b>5</b>layers: pods to GitOps</div>
+        <div><b id="fact-faults">42</b>faults</div>
+        <div><b>6</b>layers: platform to AI services</div>
         <div><b>0</b>installs, no account</div>
       </div>
     </div>
@@ -634,7 +653,7 @@ dialog.sheet::backdrop{background:rgba(0,0,0,.6)}
   <div class="notice notice-warn live-only" id="live-notice">
     <span aria-hidden="true">&#9888;</span>
     <div>
-      <strong>Live mode dispatches real faults at a real cluster.</strong>
+      <strong>Live mode dispatches real faults at a real Kubernetes cluster.</strong> Today it covers the Kubernetes faults only. Data, cloud, delivery, security and AI faults are simulator-only, and the Export tab gives you the matching AWS FIS, Azure Chaos Studio and CI templates to run them in your own tooling.
       It needs <code>KUBECONFIG_DATA</code> and <code>CLUSTER_CONTEXT</code> as repository secrets, plus a fine-grained token with Actions write access, entered below. The token is held in this browser tab only — it is never stored in the page, in the repository, or anywhere else.
       Setup steps are in the README that ships with the project.
     </div>
@@ -877,7 +896,7 @@ dialog.sheet::backdrop{background:rgba(0,0,0,.6)}
 
     <!-- ═══ right: the cluster, pinned ═══ -->
     <div class="stage" id="pane-cluster">
-      <div class="slabel">Cluster <span class="hint" id="cluster-hint">three worker nodes, one zone each</span></div>
+      <div class="slabel">System <span class="hint" id="cluster-hint">three worker nodes, one zone each</span></div>
       <section class="cluster" aria-label="Cluster state">
         <div class="sweep" id="sweep" aria-hidden="true"></div>
         <div class="dropzones" id="dropzones" aria-hidden="true"><div class="dz" id="dz-kill">Drop to kill this pod</div><div class="dz" id="dz-cordon">Drop to cordon this node</div></div>
@@ -889,6 +908,8 @@ dialog.sheet::backdrop{background:rgba(0,0,0,.6)}
             <span class="metric" id="m-err"><b>—</b> errors</span>
           </div>
         </div>
+        <div class="viewtog" id="viewtog" role="group" aria-label="View"><button type="button" data-v="pods" aria-pressed="true">Pods</button><button type="button" data-v="map" aria-pressed="false">Service map</button></div>
+        <div class="svcmap" id="svcmap" hidden><svg id="svcsvg" viewBox="0 0 600 270" role="img" aria-label="Service map: where the fault lands"></svg></div>
         <div class="nodewrap" id="nodewrap"><div class="nodes" id="nodes"></div><canvas id="flow" aria-hidden="true"></canvas></div>
         <div class="pending-row" id="pending-row" role="status"></div>
         <div class="edge" id="edge"><span>ingress</span><div class="pods" id="ingress"></div></div>
@@ -980,6 +1001,7 @@ dialog.sheet::backdrop{background:rgba(0,0,0,.6)}
     <div class="tabpane" id="tp-export">
       <h3>Take it out of the browser</h3>
       <p class="lead">The experiment you configured, as something you can apply, plus the policies, alerts and dashboards that go with it. Generated for you to review: check selectors, identifiers and metric names before applying.</p>
+      <div class="pills" id="exp-groups" role="group" aria-label="Target"></div>
       <div class="pills" id="exp-pills" role="group" aria-label="Format"></div>
       <div class="code">
         <div class="bar"><span id="exp-note"></span>
@@ -1206,16 +1228,16 @@ dialog.sheet::backdrop{background:rgba(0,0,0,.6)}
    Pure logic: no DOM, no dependencies. One simulated tick is one second. */
 
 const CATS = {
-  selfheal: 'Self-healing & HA',
-  capacity: 'Capacity & storage',
+  platform: 'Compute & platform',
   network:  'Network & edge',
-  control:  'Control plane & startup',
-  delivery: 'Delivery & GitOps',
-  ai:       'AI workloads',
-  security: 'Security & identity',
-  data:     'Data & messaging',
-  cloud:    'Cloud & regions'
+  data:     'Data & state',
+  cloud:    'Cloud & regions',
+  delivery: 'Delivery & security',
+  ai:       'AI services'
 };
+/* Older category names fold into the six layers. */
+const LAYER_OF = { selfheal: 'platform', capacity: 'platform', control: 'platform', security: 'delivery' };
+
 
 /* Reference reading for each fault: official docs only. */
 const DOCS = {
@@ -1662,6 +1684,9 @@ const FAULTS = {
     docs: ['r53', 'rdsaz']
   }
 };
+
+Object.values(FAULTS).forEach(f => { f.cat = LAYER_OF[f.cat] || f.cat; });
+FAULTS['zone-outage'].cat = 'cloud';
 
 const DEFAULT_SPEC = {
   replicas: 4,
@@ -2622,6 +2647,7 @@ function exSnap(ex, m) {
   const st = ex.st;
   ex.snaps.push({
     t: st.t, phase: ex.phase, m: { p95: m.p95, errPct: m.errPct, ready: m.ready, sat: m.sat, parts: m.parts },
+    dep: st.dep ? { name: st.dep.name, errPct: st.dep.errPct, latMs: st.dep.latMs } : null,
     nodes: st.nodes.map(n => ({
       name: n.name, zone: n.zone, cordoned: n.cordoned, notReady: n.notReady, delayMs: n.delayMs, lossPct: n.lossPct,
       stress: st.stressors.some(s => s.node === n.name), batch: n.batch,
@@ -4044,7 +4070,7 @@ function hopForFault(fault) {
   const f = FAULTS[fault];
   if (['cert-expiry', 'ingress-outage'].includes(fault)) return 'ingress';
   if (['dns-blackhole', 'coredns-failure', 'netpol-dns-block', 'net-delay', 'net-loss', 'mesh-delay', 'mesh-abort', 'webhook-fail-closed'].includes(fault)) return 'mesh';
-  if (['ai', 'data', 'cloud'].includes(f.cat) && fault !== 'gpu-node-loss' && fault !== 'model-cold-start') return 'dependency';
+  if (['ai', 'data', 'cloud'].includes(f.cat) && !['gpu-node-loss', 'model-cold-start', 'zone-outage'].includes(fault)) return 'dependency';
   if (['secret-rotation', 'signature-verify-fail'].includes(fault)) return 'dependency';
   return 'web';
 }
@@ -5016,22 +5042,22 @@ function playReplay(fromStart) {
 
 /* ── presets ── */
 const PRESETS = [
+  { title: 'A whole zone dark', desc: 'Lose an availability zone with replicas stacked on it.', icon: 'zone',
+    fault: 'zone-outage', spec: { replicas: 4, spread: false }, blast: 30 },
+  { title: 'The database fails over', desc: 'The primary is lost. How long are requests failing?', icon: 'database',
+    fault: 'db-failover', spec: { dbHa: false }, blast: 30 },
+  { title: 'The 5pm release', desc: 'A faulty version rolls out to every pod at once.', icon: 'rocket',
+    fault: 'bad-rollout', spec: { delivery: 'rolling' }, blast: 30 },
+  { title: 'The certificate expired', desc: 'A TLS certificate lapses on a Sunday. Is renewal automatic?', icon: 'door',
+    fault: 'cert-expiry', spec: { certAuto: false }, blast: 30 },
+  { title: 'The LLM provider throttles you', desc: '429s and slow answers from the model API, with no fallback.', icon: 'gauge',
+    fault: 'llm-rate-limit', spec: { fallback: false }, blast: 30 },
   { title: 'A node goes away', desc: 'Drain a node with no disruption budget. Three replicas, nothing spread.', icon: 'server-off',
     fault: 'node-drain', spec: { replicas: 3 }, blast: 30 },
   { title: 'Black Friday spike', desc: 'Traffic triples while a batch job holds the spare capacity.', icon: 'trend-up',
     fault: 'autoscaler-lag', spec: { replicas: 3, hpa: true }, blast: 30 },
-  { title: 'The 5pm release', desc: 'A faulty version rolls out to every pod at once.', icon: 'rocket',
-    fault: 'bad-rollout', spec: { delivery: 'rolling' }, blast: 30 },
-  { title: 'A whole zone dark', desc: 'Lose an availability zone with replicas stacked on it.', icon: 'zone',
-    fault: 'zone-outage', spec: { replicas: 4, spread: false }, blast: 30 },
   { title: 'Someone ran kubectl edit', desc: 'A manual change drifts from Git. Does your GitOps notice?', icon: 'git',
     fault: 'gitops-drift', spec: { gitops: 'sync' }, blast: 30 },
-  { title: 'The LLM provider throttles you', desc: '429s and slow answers from the model API, with no fallback.', icon: 'gauge',
-    fault: 'llm-rate-limit', spec: { fallback: false }, blast: 30 },
-  { title: 'The certificate expired', desc: 'A TLS certificate lapses on a Sunday. Is renewal automatic?', icon: 'door',
-    fault: 'cert-expiry', spec: { certAuto: false }, blast: 30 },
-  { title: 'The database fails over', desc: 'The primary is lost. How long are requests failing?', icon: 'database',
-    fault: 'db-failover', spec: { dbHa: false }, blast: 30 },
   { title: 'A slow dependency', desc: 'Service-mesh latency with no timeout and no retries.', icon: 'clock',
     fault: 'mesh-delay', spec: { retries: false, timeouts: false }, blast: 30 }
 ];
@@ -5210,9 +5236,31 @@ function exportCfg() {
   const c = cfgFromUI();
   return { fault: c.fault, namespace: $('ns').value.trim() || 'default', selector: $('sel').value.trim(), duration: c.duration, blast: c.blast, magnitude: c.magnitude };
 }
+const EXP_GROUPS = [
+  ['all', 'All', null],
+  ['k8s', 'Kubernetes', ['chaosmesh', 'litmus', 'istio', 'argoanalysis']],
+  ['aws', 'AWS', ['fis', 'cloudwatch']],
+  ['azure', 'Azure', ['azure']],
+  ['obs', 'Observability', ['prom', 'grafana', 'promql', 'openslo', 'sloth', 'burn', 'datadog', 'newrelic', 'otelcol', 'otlp']],
+  ['ci', 'CI/CD', ['action', 'gitlab', 'jenkins', 'tekton', 'argoanalysis']],
+  ['rep', 'Policy and reports', ['policy', 'wiki']]
+];
+let expGroup = 'all';
 function buildExportPills() {
+  const gw = $('exp-groups'); gw.replaceChildren();
+  EXP_GROUPS.forEach(([id, label]) => {
+    const b = mk('button', null, label); b.type = 'button'; b.setAttribute('aria-pressed', String(id === expGroup));
+    b.onclick = () => {
+      expGroup = id;
+      const g = EXP_GROUPS.find(x => x[0] === id)[2];
+      if (g && !g.includes(expSel)) expSel = g[0];
+      buildExportPills(); refreshExport();
+    };
+    gw.append(b);
+  });
   const wrap = $('exp-pills'); wrap.replaceChildren();
-  EXPORTS.forEach(x => {
+  const only = EXP_GROUPS.find(x => x[0] === expGroup)[2];
+  EXPORTS.filter(x => !only || only.includes(x.id)).forEach(x => {
     const b = mk('button', null, x.label); b.type = 'button'; b.setAttribute('aria-pressed', String(x.id === expSel)); b.dataset.id = x.id;
     b.onclick = () => { expSel = x.id; buildExportPills(); refreshExport(); };
     wrap.append(b);
@@ -5987,6 +6035,85 @@ function wireMotion() {
 }
 
 
+/* ══ UI: service map ════════════════════════════════════════════════════
+   The same run, drawn as a request path instead of pods. Failures in data,
+   cloud and AI layers land on a dependency, so showing nodes would hide them. */
+let viewMode = 'pods', viewTouched = false;
+const MAP_NODES = {
+  users: { x: 20, y: 105, w: 70, h: 44, t: 'Users' },
+  edge: { x: 125, y: 105, w: 90, h: 44, t: 'Edge', s: 'ingress, TLS' },
+  svc: { x: 255, y: 105, w: 110, h: 44, t: 'Service', s: '' },
+  db: { x: 440, y: 15, w: 140, h: 40, t: 'Database' },
+  cache: { x: 440, y: 70, w: 140, h: 40, t: 'Cache' },
+  queue: { x: 440, y: 125, w: 140, h: 40, t: 'Queue / broker' },
+  llm: { x: 440, y: 180, w: 140, h: 40, t: 'LLM API' },
+  vec: { x: 440, y: 235, w: 140, h: 30, t: 'Vector store' }
+};
+const MAP_LINKS = [['users', 'edge'], ['edge', 'svc'], ['svc', 'db'], ['svc', 'cache'], ['svc', 'queue'], ['svc', 'llm'], ['svc', 'vec']];
+const DEP_NODE = { 'primary database': 'db', 'read replica': 'db', 'cache': 'cache', 'message broker': 'queue', 'work queue': 'queue', 'LLM provider': 'llm', 'vector database': 'vec', 'TLS certificate': 'edge', 'rotated credential': 'svc', 'primary region': 'region' };
+const sv = (n, a, txt) => { const e = document.createElementNS('http://www.w3.org/2000/svg', n); Object.keys(a || {}).forEach(k => e.setAttribute(k, a[k])); if (txt != null) e.textContent = txt; return e; };
+
+function mapTarget(s) {
+  const fault = (ex && ex.cfg ? ex.cfg.fault : null) || selected;
+  if (!s || s.phase !== 'chaos' || !fault) return { hit: null, region: false };
+  if (s.dep && DEP_NODE[s.dep.name]) { const n = DEP_NODE[s.dep.name]; return n === 'region' ? { hit: 'svc', region: true } : { hit: n, region: false }; }
+  const hop = hopForFault(fault);
+  if (hop === 'ingress') return { hit: 'edge', region: false };
+  if (hop === 'mesh') return { hit: 'link:edge-svc', region: false };
+  return { hit: 'svc', region: fault === 'zone-outage' };
+}
+function renderMap(s) {
+  if (viewMode !== 'map' || !s) return;
+  const svg = $('svcsvg'), tg = mapTarget(s), m = s.m || {};
+  const sloP = (sloFromUI().p95_ms || 500), sloE = (sloFromUI().err_pct || 1);
+  const hurt = s.phase === 'chaos' && (m.errPct > sloE || m.p95 > sloP);
+  svg.replaceChildren();
+  if (tg.region) svg.append(sv('rect', { x: 6, y: 4, width: 588, height: 262, rx: 12, class: 'map-region' }), sv('text', { x: 14, y: 18, class: 'map-rlabel' }, 'Affected region or zone'));
+  MAP_LINKS.forEach(([a, b]) => {
+    const A = MAP_NODES[a], B = MAP_NODES[b], id = 'link:' + a + '-' + b;
+    const bad = tg.hit === id || tg.hit === b || (tg.hit === a && a !== 'svc' && a !== 'users');
+    svg.append(sv('line', { x1: A.x + A.w, y1: A.y + A.h / 2, x2: B.x, y2: B.y + B.h / 2, class: 'map-link' + (bad ? ' bad' : (hurt && b === 'svc' ? ' warn' : '')) }));
+  });
+  Object.keys(MAP_NODES).forEach(k => {
+    const n = MAP_NODES[k], hit = tg.hit === k;
+    const cls = 'map-node' + (hit ? ' bad' : (hurt && (k === 'svc' || k === 'users') ? ' warn' : ''));
+    const g = sv('g', { class: cls });
+    g.append(sv('rect', { x: n.x, y: n.y, width: n.w, height: n.h, rx: 8 }));
+    g.append(sv('text', { x: n.x + n.w / 2, y: n.y + n.h / 2 + (n.s !== undefined ? -2 : 4), 'text-anchor': 'middle', class: 'map-t' }, n.t));
+    let sub = n.s;
+    if (k === 'svc') sub = (m.ready != null ? m.ready : '?') + ' ready';
+    if (k === 'db' && hit && s.dep) sub = s.dep.errPct + '% errors';
+    if (hit && s.dep && k !== 'db' && k !== 'svc') sub = s.dep.errPct ? s.dep.errPct + '% errors' : s.dep.latMs + 'ms slower';
+    if (sub) g.append(sv('text', { x: n.x + n.w / 2, y: n.y + n.h / 2 + 12, 'text-anchor': 'middle', class: 'map-s' }, sub));
+    svg.append(g);
+  });
+  const cap = tg.region ? 'The fault takes out a whole region or zone, so everything inside it is affected.' : tg.hit ? 'The fault lands on ' + (tg.hit.startsWith('link') ? 'the network path between edge and service' : MAP_NODES[tg.hit].t.toLowerCase()) + '.' : (s.phase === 'chaos' ? 'The fault is on the service itself.' : 'No fault active.');
+  $('svcmap').dataset.caption = cap;
+  const c = $('svcmap-cap'); if (c) c.textContent = cap;
+}
+function setView(v, touched) {
+  viewMode = v; if (touched) viewTouched = true;
+  document.querySelectorAll('#viewtog button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+  $('svcmap').hidden = v !== 'map';
+  ['nodewrap', 'pending-row', 'edge'].forEach(id => { const e = $(id); if (e) e.hidden = v === 'map'; });
+  if (v === 'map') renderMap(curSnap);
+}
+function autoView(fault) {
+  if (viewTouched) return;
+  const f = FAULTS[fault]; if (!f) return;
+  const depLayer = ['data', 'ai'].includes(f.cat) || fault === 'region-failover' || ['cert-expiry', 'secret-rotation'].includes(fault);
+  setView(depLayer ? 'map' : 'pods', false);
+}
+(function hook() {
+  const rs = renderSnap; renderSnap = function (s) { rs(s); renderMap(s); };
+  const pf = pickFault; pickFault = function (id, quiet) { const r = pf(id, quiet); autoView(id); return r; };
+})();
+function wireMap() {
+  document.querySelectorAll('#viewtog button').forEach(b => { b.onclick = () => setView(b.dataset.v, true); });
+  const cap = mk('div', 'svcmap-cap'); cap.id = 'svcmap-cap'; $('svcmap').append(cap);
+}
+
+
 /* ══ start up ═══════════════════════════════════════════════════════════ */
 step('build the fault list', () => { buildCats(); buildFaults(); renderDetail(); $('fact-faults').textContent = Object.keys(FAULTS).length; });
 step('build the scenarios', buildPresets);
@@ -5996,6 +6123,7 @@ step('wire the controls', wire);
 step('wire the SRE panels', wireSre);
 step('build the analysis panels', () => { renderRules(); buildExportPills(); refreshExport(); renderGameday(); wireGameday(); buildChallenge(); renderHistory(); renderCostBase(); });
 step('wire motion and touch', wireMotion);
+step('wire the service map', () => { wireMap(); autoView(selected); });
 step('read the share link', applyHash);
 step('restore the token', () => { const t = readToken(); if (t) $('token').value = t; });
 scheduleScore();
